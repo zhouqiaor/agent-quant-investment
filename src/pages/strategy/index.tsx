@@ -1,4 +1,5 @@
 import { View, Text, ScrollView } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,6 +18,8 @@ import {
   Activity,
   Clock,
   Target,
+  Plus,
+  Radio,
 } from 'lucide-react-taro'
 
 interface StrategyItem {
@@ -29,6 +32,10 @@ interface StrategyItem {
   winRate: number
   trades: number
   description: string
+  isCustom?: boolean
+  symbol?: string
+  monitorEnabled?: boolean
+  autoTrade?: boolean
 }
 
 interface AgentSignal {
@@ -42,10 +49,23 @@ interface AgentSignal {
   executed: boolean
 }
 
+interface MonitorSignal {
+  id: string
+  strategyId: string
+  strategyName: string
+  symbol: string
+  type: 'buy' | 'sell'
+  price: number
+  reason: string
+  time: string
+  executed: boolean
+}
+
 const StrategyPage = () => {
   const [autoTrade, setAutoTrade] = useState(false)
   const [strategies, setStrategies] = useState<StrategyItem[]>([])
   const [agentSignals, setAgentSignals] = useState<AgentSignal[]>([])
+  const [monitorSignals, setMonitorSignals] = useState<MonitorSignal[]>([])
   const [agentActive, setAgentActive] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -53,6 +73,7 @@ const StrategyPage = () => {
     loadStrategies()
     loadSignals()
     loadAgentStatus()
+    loadMonitorSignals()
   }, [])
 
   const loadStrategies = async () => {
@@ -86,6 +107,17 @@ const StrategyPage = () => {
       console.error('loadAgentStatus error:', e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMonitorSignals = async () => {
+    try {
+      const res = await Network.request({ url: '/api/strategies/monitor/signals?limit=5' })
+      console.log('monitor signals:', res.data)
+      const data = res.data?.data
+      if (data) setMonitorSignals(data)
+    } catch (e) {
+      console.error('loadMonitorSignals error:', e)
     }
   }
 
@@ -222,8 +254,12 @@ const StrategyPage = () => {
             <Text className="block text-base font-bold text-slate-100">
               策略管理
             </Text>
-            <Button className="bg-emerald-500 bg-opacity-20 text-emerald-400 h-8 px-3">
-              <Text className="text-xs">+ 新建策略</Text>
+            <Button
+              className="bg-emerald-500 bg-opacity-20 text-emerald-400 h-8 px-3"
+              onClick={() => Taro.navigateTo({ url: '/pages/strategy/create' })}
+            >
+              <Plus size={14} color="#34d399" />
+              <Text className="text-xs ml-1">新建策略</Text>
             </Button>
           </View>
 
@@ -242,10 +278,26 @@ const StrategyPage = () => {
                           {s.name}
                         </Text>
                         {getStatusBadge(s.status)}
+                        {s.isCustom && (
+                          <Badge className="bg-purple-500 bg-opacity-20 text-purple-400 border-purple-500 border-opacity-30">
+                            自定义
+                          </Badge>
+                        )}
+                        {s.monitorEnabled && s.status === 'running' && (
+                          <Badge className="bg-violet-500 bg-opacity-20 text-violet-400 border-violet-500 border-opacity-30">
+                            <Radio size={10} color="#a78bfa" />
+                            <Text className="text-xs ml-1">监听中</Text>
+                          </Badge>
+                        )}
                       </View>
                       <Text className="block text-xs text-slate-500">
                         {s.description}
                       </Text>
+                      {s.isCustom && s.symbol && (
+                        <Text className="block text-xs text-slate-400">
+                          标的: {s.symbol} | {s.autoTrade ? '自动交易' : '仅信号'}
+                        </Text>
+                      )}
                     </View>
                   </View>
 
@@ -297,9 +349,16 @@ const StrategyPage = () => {
                     <Button
                       className="flex-1 h-8 bg-slate-700 text-slate-300"
                       variant="secondary"
+                      onClick={() => {
+                        if (s.isCustom) {
+                          Taro.navigateTo({ url: `/pages/strategy/create?id=${s.id}` })
+                        }
+                      }}
                     >
                       <Target size={12} color="#cbd5e1" />
-                      <Text className="text-xs font-medium ml-1">参数</Text>
+                      <Text className="text-xs font-medium ml-1">
+                        {s.isCustom ? '编辑' : '参数'}
+                      </Text>
                     </Button>
                   </View>
                 </CardContent>
@@ -384,6 +443,74 @@ const StrategyPage = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* 自定义策略监听信号 */}
+        {monitorSignals.length > 0 && (
+          <Card className="bg-slate-800 border-slate-700">
+            <CardContent className="p-4">
+              <View className="flex flex-row items-center justify-between mb-3">
+                <View className="flex flex-row items-center gap-2">
+                  <Radio size={14} color="#8b5cf6" />
+                  <Text className="block text-sm font-semibold text-slate-100">
+                    策略监听信号
+                  </Text>
+                </View>
+                <Badge className="bg-violet-500 bg-opacity-20 text-violet-400 border-violet-500 border-opacity-30">
+                  监听中
+                </Badge>
+              </View>
+
+              <View className="flex flex-col gap-2">
+                {monitorSignals.map((sig) => (
+                  <View
+                    key={sig.id}
+                    className="flex flex-row items-center justify-between bg-slate-900 rounded-lg p-3"
+                  >
+                    <View className="flex flex-row items-center gap-2 flex-1">
+                      {sig.type === 'buy' ? (
+                        <TrendingUp size={14} color="#22c55e" />
+                      ) : (
+                        <TrendingDown size={14} color="#ef4444" />
+                      )}
+                      <View className="flex flex-col gap-1 flex-1">
+                        <View className="flex flex-row items-center gap-2">
+                          <Text className="block text-xs font-medium text-slate-100">
+                            {sig.strategyName}
+                          </Text>
+                          <Badge
+                            className={`text-xs ${
+                              sig.type === 'buy'
+                                ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30'
+                                : 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30'
+                            }`}
+                          >
+                            {sig.type === 'buy' ? '买入' : '卖出'}
+                          </Badge>
+                          {sig.executed && (
+                            <Badge className="bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30 text-xs">
+                              已执行
+                            </Badge>
+                          )}
+                        </View>
+                        <Text className="block text-xs text-slate-500">
+                          {sig.reason}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="flex flex-col items-end gap-1">
+                      <Text className="block text-xs font-medium text-slate-100 tabular-nums">
+                        {sig.symbol}
+                      </Text>
+                      <Text className="block text-xs text-slate-500">
+                        {new Date(sig.time).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </CardContent>
+          </Card>
+        )}
       </View>
     </ScrollView>
   )

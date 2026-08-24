@@ -7,9 +7,11 @@ import { StrategyModule } from '@/strategy/strategy.module';
 import { AgentModule } from '@/agent/agent.module';
 import { TradeModule } from '@/trade/trade.module';
 import { RiskModule } from '@/risk/risk.module';
+import { StockModule } from '@/stock/stock.module';
+import { AgentAnalysisModule } from '@/agent-analysis/agent-analysis.module';
 
 @Module({
-  imports: [MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule],
+  imports: [MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule],
   controllers: [AppController],
   providers: [AppService],
 })

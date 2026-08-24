@@ -114,27 +114,42 @@ const OPERATOR_LABELS: Record<string, string> = {
   less: '弱于',
 }
 
-// 常用股票列表
-const STOCK_LIST = [
-  { symbol: '600519', name: '贵州茅台', market: 'SH' },
-  { symbol: '000858', name: '五粮液', market: 'SZ' },
-  { symbol: '601318', name: '中国平安', market: 'SH' },
-  { symbol: '000333', name: '美的集团', market: 'SZ' },
-  { symbol: '600036', name: '招商银行', market: 'SH' },
-  { symbol: '000001', name: '平安银行', market: 'SZ' },
-  { symbol: '601888', name: '中国中免', market: 'SH' },
-  { symbol: '300750', name: '宁德时代', market: 'SZ' },
-  { symbol: '600900', name: '长江电力', market: 'SH' },
-  { symbol: '002594', name: '比亚迪', market: 'SZ' },
-  { symbol: '601012', name: '隆基绿能', market: 'SH' },
-  { symbol: '688981', name: '中芯国际', market: 'SH' },
-]
+// 股票搜索结果
+interface StockSearchResult {
+  symbol: string
+  name: string
+  market: 'A' | 'HK' | 'US'
+  industry: string
+  price: number
+  change: number
+  changePercent: number
+  volume: number
+  marketCap: number
+  pe: number
+  pb: number
+  roe: number
+}
+
+// Agent 分析结果
+interface AgentAnalysisData {
+  overallScore: number
+  overallSignal: string
+  technical: { score: number; signal: string; summary: string; indicators: { name: string; value: string; signal: string }[] }
+  fundamental: { score: number; signal: string; summary: string; metrics: { name: string; value: string; rating: string }[] }
+  capitalFlow: { score: number; signal: string; summary: string }
+  sentiment: { score: number; signal: string; summary: string; news: { title: string; sentiment: string; time: string }[] }
+  recommendation: string
+  actionPlan: { action: string; targetPrice: number; stopLoss: number; positionSize: number; confidence: number; reason: string }
+}
 
 const StrategyCreatePage = () => {
   const [strategyName, setStrategyName] = useState('')
   const [selectedStock, setSelectedStock] = useState('')
+  const [selectedStockInfo, setSelectedStockInfo] = useState<StockSearchResult | null>(null)
   const [showStockPicker, setShowStockPicker] = useState(false)
   const [stockSearch, setStockSearch] = useState('')
+  const [stockSearchResults, setStockSearchResults] = useState<StockSearchResult[]>([])
+  const [searchingStock, setSearchingStock] = useState(false)
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>([])
   const [indicatorParams, setIndicatorParams] = useState<Record<string, Record<string, number>>>({})
   const [buyConditions, setBuyConditions] = useState<Condition[]>([])
@@ -145,6 +160,11 @@ const StrategyCreatePage = () => {
   const [autoTrade, setAutoTrade] = useState(false)
   const [saving, setSaving] = useState(false)
   const [monitorEnabled, setMonitorEnabled] = useState(true)
+
+  // Agent 分析
+  const [agentAnalysis, setAgentAnalysis] = useState<AgentAnalysisData | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
 
   // 编辑模式
   const [editId, setEditId] = useState<string | null>(null)
@@ -246,14 +266,52 @@ const StrategyCreatePage = () => {
     }
   }
 
-  const filteredStocks = STOCK_LIST.filter(
-    (s) =>
-      s.symbol.includes(stockSearch) ||
-      s.name.includes(stockSearch) ||
-      s.market.toLowerCase().includes(stockSearch.toLowerCase()),
-  )
+  // 搜索股票（调用后端API）
+  const searchStocks = async (query: string) => {
+    setStockSearch(query)
+    if (!query.trim()) {
+      setStockSearchResults([])
+      return
+    }
+    setSearchingStock(true)
+    try {
+      const res = await Network.request({ url: '/api/stock/search', data: { q: query }, method: 'GET' })
+      console.log('search stocks:', res.data)
+      const data = res.data?.data || []
+      setStockSearchResults(data)
+    } catch (e) {
+      console.error('searchStocks error:', e)
+    } finally {
+      setSearchingStock(false)
+    }
+  }
 
-  const getSelectedStockInfo = () => STOCK_LIST.find((s) => s.symbol === selectedStock)
+  // 防抖搜索
+  let searchTimer: ReturnType<typeof setTimeout> | null = null
+  const searchStocksDebounced = (query: string) => {
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => searchStocks(query), 300)
+  }
+
+  // Agent 分析
+  const runAgentAnalysis = async () => {
+    if (!selectedStock) return
+    setAnalyzing(true)
+    setShowAnalysis(true)
+    try {
+      const res = await Network.request({ url: '/api/agent-analysis/analyze', data: { symbol: selectedStock }, method: 'GET' })
+      console.log('agent analysis:', res.data)
+      const data = res.data?.data
+      if (data) {
+        setAgentAnalysis(data)
+      }
+    } catch (e) {
+      console.error('agentAnalysis error:', e)
+      Taro.showToast({ title: '分析失败，请重试', icon: 'none' })
+    } finally {
+      setAnalyzing(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!strategyName.trim()) {
@@ -307,7 +365,7 @@ const StrategyCreatePage = () => {
     }
   }
 
-  const stockInfo = getSelectedStockInfo()
+  const stockInfo = selectedStockInfo
 
   return (
     <ScrollView scrollY className="h-full bg-slate-900">
@@ -347,42 +405,74 @@ const StrategyCreatePage = () => {
               </View>
 
               <View className="flex flex-col gap-2">
-                <Text className="block text-xs text-slate-400">股票标的</Text>
-                <View
-                  className="bg-slate-900 rounded-lg px-3 py-3 flex flex-row items-center justify-between"
-                  onClick={() => setShowStockPicker(!showStockPicker)}
-                >
-                  {stockInfo ? (
-                    <View className="flex flex-row items-center gap-2">
-                      <Text className="block text-sm font-semibold text-slate-100">
-                        {stockInfo.name}
-                      </Text>
-                      <Badge className="bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30">
-                        {stockInfo.market}
-                      </Badge>
-                      <Text className="block text-xs text-slate-500">{stockInfo.symbol}</Text>
-                    </View>
-                  ) : (
-                    <Text className="block text-sm text-slate-500">点击选择股票标的</Text>
-                  )}
-                  <Text className="block text-xs text-slate-500">
-                    {showStockPicker ? '收起' : '选择'}
-                  </Text>
+                <Text className="block text-xs text-slate-400">股票标的（支持A股/港股/美股搜索）</Text>
+                <View className="bg-slate-900 rounded-lg px-3 py-2">
+                  <Input
+                    className="w-full bg-transparent text-slate-100"
+                    placeholder="输入股票代码或名称搜索，如：茅台、600519、AAPL"
+                    value={stockSearch}
+                    onInput={(e) => {
+                      const val = e.detail.value
+                      setStockSearch(val)
+                      if (val.trim()) {
+                        searchStocksDebounced(val)
+                      } else {
+                        setStockSearchResults([])
+                      }
+                    }}
+                    onFocus={() => setShowStockPicker(true)}
+                  />
                 </View>
 
-                {showStockPicker && (
-                  <View className="bg-slate-900 rounded-lg p-3 flex flex-col gap-2">
-                    <View className="bg-slate-800 rounded-lg px-3 py-2">
-                      <Input
-                        className="w-full bg-transparent text-slate-100"
-                        placeholder="搜索股票代码或名称"
-                        value={stockSearch}
-                        onInput={(e) => setStockSearch(e.detail.value)}
-                      />
+                {selectedStock && selectedStockInfo && (
+                  <View className="bg-emerald-500 bg-opacity-10 border border-emerald-500 border-opacity-30 rounded-lg p-3 flex flex-row items-center justify-between">
+                    <View className="flex flex-col gap-1">
+                      <View className="flex flex-row items-center gap-2">
+                        <Text className="block text-sm font-bold text-slate-100">
+                          {selectedStockInfo.name}
+                        </Text>
+                        <Badge className={`${
+                          selectedStockInfo.market === 'A' ? 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30' :
+                          selectedStockInfo.market === 'HK' ? 'bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30' :
+                          'bg-amber-500 bg-opacity-20 text-amber-400 border-amber-500 border-opacity-30'
+                        }`}
+                        >
+                          {selectedStockInfo.market}
+                        </Badge>
+                        <Text className="block text-xs text-slate-500">{selectedStockInfo.symbol}</Text>
+                      </View>
+                      <View className="flex flex-row items-center gap-3">
+                        <Text className="block text-xs text-slate-400">
+                          ¥{selectedStockInfo.price.toFixed(2)}
+                        </Text>
+                        <Text className={`block text-xs font-medium ${
+                          selectedStockInfo.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
+                        }`}
+                        >
+                          {selectedStockInfo.changePercent >= 0 ? '+' : ''}{selectedStockInfo.changePercent.toFixed(2)}%
+                        </Text>
+                        <Text className="block text-xs text-slate-500">PE:{selectedStockInfo.pe}</Text>
+                        <Text className="block text-xs text-slate-500">{selectedStockInfo.industry}</Text>
+                      </View>
                     </View>
+                    <View
+                      className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800"
+                      onClick={() => {
+                        setSelectedStock('')
+                        setSelectedStockInfo(null)
+                        setAgentAnalysis(null)
+                      }}
+                    >
+                      <Trash2 size={14} color="#ef4444" />
+                    </View>
+                  </View>
+                )}
+
+                {showStockPicker && stockSearchResults.length > 0 && (
+                  <View className="bg-slate-900 rounded-lg p-3 flex flex-col gap-2">
                     <ScrollView scrollY className="max-h-48">
                       <View className="flex flex-col gap-1">
-                        {filteredStocks.map((s) => (
+                        {stockSearchResults.map((s) => (
                           <View
                             key={s.symbol}
                             className={`flex flex-row items-center justify-between px-3 py-2 rounded-lg ${
@@ -392,27 +482,268 @@ const StrategyCreatePage = () => {
                             }`}
                             onClick={() => {
                               setSelectedStock(s.symbol)
+                              setSelectedStockInfo(s)
                               setShowStockPicker(false)
                               setStockSearch('')
+                              setStockSearchResults([])
+                              setAgentAnalysis(null)
                             }}
                           >
-                            <View className="flex flex-row items-center gap-2">
-                              <Text className="block text-sm text-slate-100">{s.name}</Text>
-                              <Badge className="bg-slate-700 text-slate-400 border-slate-600">
-                                {s.market}
-                              </Badge>
+                            <View className="flex flex-col gap-1">
+                              <View className="flex flex-row items-center gap-2">
+                                <Text className="block text-sm text-slate-100">{s.name}</Text>
+                                <Badge className={`${
+                                  s.market === 'A' ? 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30' :
+                                  s.market === 'HK' ? 'bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30' :
+                                  'bg-amber-500 bg-opacity-20 text-amber-400 border-amber-500 border-opacity-30'
+                                }`}
+                                >
+                                  {s.market}
+                                </Badge>
+                                <Text className="block text-xs text-slate-500">{s.industry}</Text>
+                              </View>
+                              <View className="flex flex-row items-center gap-2">
+                                <Text className="block text-xs text-slate-400">{s.symbol}</Text>
+                                <Text className="block text-xs text-slate-400">¥{s.price.toFixed(2)}</Text>
+                                <Text className={`block text-xs ${
+                                  s.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
+                                }`}
+                                >
+                                  {s.changePercent >= 0 ? '+' : ''}{s.changePercent.toFixed(2)}%
+                                </Text>
+                              </View>
                             </View>
-                            <Text className="block text-xs text-slate-500">{s.symbol}</Text>
                           </View>
                         ))}
                       </View>
                     </ScrollView>
                   </View>
                 )}
+
+                {searchingStock && (
+                  <Text className="block text-xs text-slate-500">搜索中...</Text>
+                )}
               </View>
             </View>
           </CardContent>
         </Card>
+
+        {/* Agent 智能分析 */}
+        {selectedStock && (
+          <Card className="bg-slate-800 border-slate-700">
+            <CardContent className="p-4">
+              <View className="flex flex-row items-center justify-between mb-3">
+                <View className="flex flex-row items-center gap-2">
+                  <Radio size={18} color="#a855f7" />
+                  <Text className="block text-sm font-bold text-slate-100">Agent 智能分析</Text>
+                </View>
+                <Button
+                  className="bg-purple-500 bg-opacity-20 text-purple-400 h-7 px-3"
+                  onClick={runAgentAnalysis}
+                >
+                  {analyzing ? (
+                    <Text className="text-xs">分析中...</Text>
+                  ) : (
+                    <Text className="text-xs">{agentAnalysis ? '重新分析' : '开始分析'}</Text>
+                  )}
+                </Button>
+              </View>
+
+              {analyzing && (
+                <View className="flex items-center justify-center py-6">
+                  <View className="w-10 h-10 rounded-full border-2 border-purple-500 border-t-transparent" style={{ animation: 'spin 1s linear infinite' }} />
+                  <Text className="block text-xs text-slate-400 mt-3">Agent 正在进行多维度分析...</Text>
+                </View>
+              )}
+
+              {agentAnalysis && !analyzing && (
+                <View className="flex flex-col gap-3">
+                  {/* 综合评分 */}
+                  <View className="bg-slate-900 rounded-lg p-3 flex flex-row items-center justify-between">
+                    <View className="flex flex-col gap-1">
+                      <Text className="block text-xs text-slate-400">综合评分</Text>
+                      <View className="flex flex-row items-center gap-2">
+                        <Text className={`block text-2xl font-bold ${
+                          agentAnalysis.overallScore >= 70 ? 'text-green-400' :
+                          agentAnalysis.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
+                        }`}
+                        >
+                          {agentAnalysis.overallScore}
+                        </Text>
+                        <Badge className={`${
+                          agentAnalysis.overallSignal === 'strong_buy' || agentAnalysis.overallSignal === 'buy'
+                            ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30'
+                            : agentAnalysis.overallSignal === 'neutral'
+                            ? 'bg-amber-500 bg-opacity-20 text-amber-400 border-amber-500 border-opacity-30'
+                            : 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30'
+                        }`}
+                        >
+                          {agentAnalysis.overallSignal === 'strong_buy' ? '强烈买入' :
+                           agentAnalysis.overallSignal === 'buy' ? '买入' :
+                           agentAnalysis.overallSignal === 'neutral' ? '中性' :
+                           agentAnalysis.overallSignal === 'sell' ? '卖出' : '强烈卖出'}
+                        </Badge>
+                      </View>
+                    </View>
+                    <View className="flex flex-col items-end gap-1">
+                      <Text className="block text-xs text-slate-500">建议操作</Text>
+                      <Text className={`block text-sm font-bold ${
+                        agentAnalysis.actionPlan.action === 'buy' ? 'text-green-400' :
+                        agentAnalysis.actionPlan.action === 'sell' ? 'text-red-400' :
+                        agentAnalysis.actionPlan.action === 'reduce' ? 'text-orange-400' : 'text-slate-400'
+                      }`}
+                      >
+                        {agentAnalysis.actionPlan.action === 'buy' ? '买入' :
+                         agentAnalysis.actionPlan.action === 'sell' ? '卖出' :
+                         agentAnalysis.actionPlan.action === 'reduce' ? '减仓' : '持仓观望'}
+                      </Text>
+                      <Text className="block text-xs text-slate-500">
+                        置信度 {agentAnalysis.actionPlan.confidence}%
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* 四维评分 */}
+                  <View className="flex flex-row gap-2">
+                    <View className="flex-1 bg-slate-900 rounded-lg p-2 flex flex-col items-center">
+                      <Text className="block text-xs text-slate-500">技术面</Text>
+                      <Text className={`block text-lg font-bold ${
+                        agentAnalysis.technical.score >= 60 ? 'text-green-400' :
+                        agentAnalysis.technical.score <= 40 ? 'text-red-400' : 'text-amber-400'
+                      }`}
+                      >{agentAnalysis.technical.score}</Text>
+                    </View>
+                    <View className="flex-1 bg-slate-900 rounded-lg p-2 flex flex-col items-center">
+                      <Text className="block text-xs text-slate-500">基本面</Text>
+                      <Text className={`block text-lg font-bold ${
+                        agentAnalysis.fundamental.score >= 60 ? 'text-green-400' :
+                        agentAnalysis.fundamental.score <= 40 ? 'text-red-400' : 'text-amber-400'
+                      }`}
+                      >{agentAnalysis.fundamental.score}</Text>
+                    </View>
+                    <View className="flex-1 bg-slate-900 rounded-lg p-2 flex flex-col items-center">
+                      <Text className="block text-xs text-slate-500">资金面</Text>
+                      <Text className={`block text-lg font-bold ${
+                        agentAnalysis.capitalFlow.score >= 60 ? 'text-green-400' :
+                        agentAnalysis.capitalFlow.score <= 40 ? 'text-red-400' : 'text-amber-400'
+                      }`}
+                      >{agentAnalysis.capitalFlow.score}</Text>
+                    </View>
+                    <View className="flex-1 bg-slate-900 rounded-lg p-2 flex flex-col items-center">
+                      <Text className="block text-xs text-slate-500">消息面</Text>
+                      <Text className={`block text-lg font-bold ${
+                        agentAnalysis.sentiment.score >= 60 ? 'text-green-400' :
+                        agentAnalysis.sentiment.score <= 40 ? 'text-red-400' : 'text-amber-400'
+                      }`}
+                      >{agentAnalysis.sentiment.score}</Text>
+                    </View>
+                  </View>
+
+                  {/* 综合建议 */}
+                  <View className="bg-slate-900 rounded-lg p-3">
+                    <Text className="block text-xs text-slate-400 mb-2">Agent 建议</Text>
+                    <Text className="block text-xs text-slate-300 leading-5">
+                      {agentAnalysis.recommendation}
+                    </Text>
+                    <Text className="block text-xs text-slate-500 mt-2">
+                      {agentAnalysis.actionPlan.reason}
+                    </Text>
+                    {agentAnalysis.actionPlan.targetPrice > 0 && (
+                      <View className="flex flex-row gap-4 mt-2">
+                        <Text className="block text-xs text-green-400">
+                          目标价: ¥{agentAnalysis.actionPlan.targetPrice.toFixed(2)}
+                        </Text>
+                        <Text className="block text-xs text-red-400">
+                          止损价: ¥{agentAnalysis.actionPlan.stopLoss.toFixed(2)}
+                        </Text>
+                        {agentAnalysis.actionPlan.positionSize > 0 && (
+                          <Text className="block text-xs text-amber-400">
+                            建议仓位: {agentAnalysis.actionPlan.positionSize}%
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+
+                  {/* 技术指标详情 */}
+                  {showAnalysis && (
+                    <View className="flex flex-col gap-2">
+                      <Text className="block text-xs text-slate-400">技术指标信号</Text>
+                      <View className="flex flex-col gap-1">
+                        {agentAnalysis.technical.indicators.map((ind, idx) => (
+                          <View key={idx} className="flex flex-row items-center justify-between bg-slate-900 rounded px-3 py-2">
+                            <Text className="block text-xs text-slate-300">{ind.name}</Text>
+                            <View className="flex flex-row items-center gap-2">
+                              <Text className="block text-xs text-slate-400">{ind.value}</Text>
+                              <Badge className={`${
+                                ind.signal === 'buy' ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30' :
+                                ind.signal === 'sell' ? 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30' :
+                                'bg-slate-700 text-slate-400 border-slate-600'
+                              }`}
+                              >
+                                {ind.signal === 'buy' ? '买入' : ind.signal === 'sell' ? '卖出' : '中性'}
+                              </Badge>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+
+                      <Text className="block text-xs text-slate-400 mt-2">基本面指标</Text>
+                      <View className="flex flex-col gap-1">
+                        {agentAnalysis.fundamental.metrics.map((m, idx) => (
+                          <View key={idx} className="flex flex-row items-center justify-between bg-slate-900 rounded px-3 py-2">
+                            <Text className="block text-xs text-slate-300">{m.name}</Text>
+                            <View className="flex flex-row items-center gap-2">
+                              <Text className="block text-xs text-slate-400">{m.value}</Text>
+                              <Badge className={`${
+                                m.rating === 'excellent' ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30' :
+                                m.rating === 'good' ? 'bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30' :
+                                m.rating === 'fair' ? 'bg-amber-500 bg-opacity-20 text-amber-400 border-amber-500 border-opacity-30' :
+                                'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30'
+                              }`}
+                              >
+                                {m.rating === 'excellent' ? '优秀' : m.rating === 'good' ? '良好' : m.rating === 'fair' ? '一般' : '较差'}
+                              </Badge>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+
+                      <Text className="block text-xs text-slate-400 mt-2">近期消息</Text>
+                      <View className="flex flex-col gap-1">
+                        {agentAnalysis.sentiment.news.map((n, idx) => (
+                          <View key={idx} className="flex flex-row items-center justify-between bg-slate-900 rounded px-3 py-2">
+                            <Text className="block text-xs text-slate-300 flex-1">{n.title}</Text>
+                            <View className="flex flex-row items-center gap-2 ml-2">
+                              <Text className="block text-xs text-slate-500">{n.time}</Text>
+                              <Badge className={`${
+                                n.sentiment === 'positive' ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30' :
+                                n.sentiment === 'negative' ? 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30' :
+                                'bg-slate-700 text-slate-400 border-slate-600'
+                              }`}
+                              >
+                                {n.sentiment === 'positive' ? '利好' : n.sentiment === 'negative' ? '利空' : '中性'}
+                              </Badge>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  <View
+                    className="flex items-center py-2"
+                    onClick={() => setShowAnalysis(!showAnalysis)}
+                  >
+                    <Text className="block text-xs text-purple-400">
+                      {showAnalysis ? '收起详情' : '展开详情'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* 技术指标选择 */}
         <Card className="bg-slate-800 border-slate-700">

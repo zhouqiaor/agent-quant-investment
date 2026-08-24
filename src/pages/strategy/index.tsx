@@ -20,6 +20,7 @@ import {
   Target,
   Plus,
   Radio,
+  ChartBar,
 } from 'lucide-react-taro'
 
 interface StrategyItem {
@@ -254,13 +255,31 @@ const StrategyPage = () => {
             <Text className="block text-base font-bold text-slate-100">
               策略管理
             </Text>
-            <Button
-              className="bg-emerald-500 bg-opacity-20 text-emerald-400 h-8 px-3"
-              onClick={() => Taro.navigateTo({ url: '/pages/strategy/create' })}
-            >
-              <Plus size={14} color="#34d399" />
-              <Text className="text-xs ml-1">新建策略</Text>
-            </Button>
+            <View className="flex flex-row gap-2">
+              <Button
+                variant="outline"
+                className="bg-blue-500 bg-opacity-10 border-blue-500 border-opacity-30 text-blue-400 h-8 px-3"
+                onClick={() => Taro.navigateTo({ url: '/pages/backtest/index' })}
+              >
+                <ChartBar size={14} color="#60a5fa" />
+                <Text className="text-xs ml-1">回测</Text>
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-amber-500 bg-opacity-10 border-amber-500 border-opacity-30 text-amber-400 h-8 px-3"
+                onClick={() => Taro.navigateTo({ url: '/pages/paper-trading/index' })}
+              >
+                <Activity size={14} color="#fbbf24" />
+                <Text className="text-xs ml-1">模拟交易</Text>
+              </Button>
+              <Button
+                className="bg-emerald-500 bg-opacity-20 text-emerald-400 h-8 px-3"
+                onClick={() => Taro.navigateTo({ url: '/pages/strategy/create' })}
+              >
+                <Plus size={14} color="#34d399" />
+                <Text className="text-xs ml-1">新建</Text>
+              </Button>
+            </View>
           </View>
 
           {loading ? (

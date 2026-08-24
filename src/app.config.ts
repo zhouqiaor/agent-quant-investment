@@ -5,6 +5,8 @@ export default typeof defineAppConfig === 'function'
       'pages/market/index',
       'pages/strategy/index',
       'pages/strategy/create',
+      'pages/backtest/index',
+      'pages/paper-trading/index',
       'pages/profile/index'
     ],
     window: {

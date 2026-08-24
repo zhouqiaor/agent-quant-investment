@@ -7,5 +7,6 @@ import { StrategyModule } from '../strategy/strategy.module';
   imports: [StrategyModule],
   controllers: [MarketController],
   providers: [MarketService],
+  exports: [MarketService],
 })
 export class MarketModule {}

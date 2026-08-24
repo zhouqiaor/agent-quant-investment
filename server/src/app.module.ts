@@ -9,9 +9,11 @@ import { TradeModule } from '@/trade/trade.module';
 import { RiskModule } from '@/risk/risk.module';
 import { StockModule } from '@/stock/stock.module';
 import { AgentAnalysisModule } from '@/agent-analysis/agent-analysis.module';
+import { BacktestModule } from '@/backtest/backtest.module';
+import { PaperTradingModule } from '@/paper-trading/paper-trading.module';
 
 @Module({
-  imports: [MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule],
+  imports: [MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule],
   controllers: [AppController],
   providers: [AppService],
 })

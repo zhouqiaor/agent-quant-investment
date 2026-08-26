@@ -67,8 +67,8 @@ export class AgentAnalysisService {
   /**
    * 执行多维度 Agent 分析
    */
-  analyze(symbol: string): AgentAnalysisResult | null {
-    const stock = this.stockService.getStockQuote(symbol);
+  async analyze(symbol: string): Promise<AgentAnalysisResult | null> {
+    const stock = await this.stockService.getStockQuote(symbol);
     if (!stock) return null;
 
     const technical = this.analyzeTechnical(stock);

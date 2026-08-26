@@ -12,21 +12,21 @@ export class StockController {
   }
 
   @Get('quote')
-  getStockQuote(@Query('symbol') symbol: string) {
-    const stock = this.stockService.getStockQuote(symbol);
+  async getStockQuote(@Query('symbol') symbol: string) {
+    const stock = await this.stockService.getStockQuote(symbol);
     if (!stock) {
-      return { code: 404, msg: '股票不存在', data: null };
+      return { code: 404, msg: '股票不存在或数据获取失败', data: null };
     }
     return { code: 200, msg: 'success', data: stock };
   }
 
   @Get('kline')
-  getKlineData(
+  async getKlineData(
     @Query('symbol') symbol: string,
     @Query('period') period: string = 'daily',
     @Query('limit') limit: string = '60',
   ) {
-    const data = this.stockService.getKlineData(symbol, period, parseInt(limit) || 60);
+    const data = await this.stockService.getKlineData(symbol, period, parseInt(limit) || 60);
     return { code: 200, msg: 'success', data };
   }
 

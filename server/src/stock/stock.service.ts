@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as iconv from 'iconv-lite';
 
 export interface StockInfo {
   symbol: string;
@@ -80,7 +81,9 @@ export class StockService {
 
       if (!response.ok) return null;
 
-      const text = await response.text();
+      // Sina API returns GBK encoded data, convert to UTF-8
+      const buffer = await response.arrayBuffer();
+      const text = iconv.decode(Buffer.from(buffer), 'gbk');
       const match = text.match(/hq_str_(\w+)="(.*)"/);
       if (!match || !match[2]) return null;
 
@@ -151,7 +154,9 @@ export class StockService {
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const text = await response.text();
+      // Sina API returns GBK encoded data, convert to UTF-8
+      const buffer = await response.arrayBuffer();
+      const text = iconv.decode(Buffer.from(buffer), 'gbk');
       const results: StockInfo[] = [];
 
       const lines = text.split('\n').filter(line => line.trim());

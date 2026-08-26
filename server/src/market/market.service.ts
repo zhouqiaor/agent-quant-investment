@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
+import * as iconv from 'iconv-lite';
 
 export interface MarketItem {
   symbol: string;
@@ -74,7 +75,9 @@ export class MarketService {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const text = await response.text();
+      // Sina API returns GBK encoded data, convert to UTF-8
+      const buffer = await response.arrayBuffer();
+      const text = iconv.decode(Buffer.from(buffer), 'gbk');
       const data = this.parseSinaResponse(text);
       
       // Update cache

@@ -132,8 +132,8 @@ const ProfilePage = () => {
 
         {/* 持仓明细 */}
         <TabsContent value="positions" className="flex-1">
-          <ScrollView scrollY className="flex-1">
-            <View className="px-4 pb-24 gap-3 flex flex-col">
+          <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
+            <View className="px-4 pb-20 gap-3 flex flex-col">
               {loading ? (
                 <View className="flex items-center justify-center py-12">
                   <Text className="block text-sm text-slate-500">加载中...</Text>
@@ -225,8 +225,8 @@ const ProfilePage = () => {
 
         {/* 交易记录 */}
         <TabsContent value="trades" className="flex-1">
-          <ScrollView scrollY className="flex-1">
-            <View className="px-4 pb-24 gap-2 flex flex-col">
+          <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
+            <View className="px-4 pb-20 gap-2 flex flex-col">
               {loading ? (
                 <View className="flex items-center justify-center py-12">
                   <Text className="block text-sm text-slate-500">加载中...</Text>
@@ -293,8 +293,8 @@ const ProfilePage = () => {
 
         {/* 风控设置 */}
         <TabsContent value="risk" className="flex-1">
-          <ScrollView scrollY className="flex-1">
-            <View className="px-4 pb-24 gap-4 flex flex-col">
+          <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
+            <View className="px-4 pb-20 gap-4 flex flex-col">
               {/* 风控概览 */}
               <Card className="bg-slate-800 border-slate-700 mt-3">
                 <CardContent className="p-4">

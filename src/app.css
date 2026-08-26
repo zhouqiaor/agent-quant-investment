@@ -154,3 +154,169 @@ image {
   background-color: var(--selection);
   color: var(--selection-foreground);
 }
+
+/* ============================================
+   H5 移动端优化样式
+   ============================================ */
+
+/* 安全区域变量 */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --tabbar-height: 50px;
+}
+
+/* H5 端基础优化 */
+@media (hover: none) and (pointer: coarse) {
+  /* 移动端触摸优化 */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  /* 增大触摸目标 */
+  button,
+  [role="button"],
+  a,
+  .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 优化滚动 */
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
+/* H5 端页面容器优化 */
+.taro_page {
+  min-height: 100vh;
+  padding-top: var(--safe-area-top);
+  padding-bottom: calc(var(--safe-area-bottom) + var(--tabbar-height));
+  background-color: var(--background);
+}
+
+/* 底部安全区域占位 */
+.safe-area-bottom {
+  padding-bottom: var(--safe-area-bottom);
+}
+
+/* TabBar 页面底部额外间距 */
+.tabbar-page {
+  padding-bottom: calc(var(--safe-area-bottom) + var(--tabbar-height) + 16px);
+}
+
+/* 固定底部元素适配 */
+.fixed-bottom {
+  position: fixed;
+  bottom: calc(var(--safe-area-bottom) + var(--tabbar-height));
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+/* 移动端字体优化 */
+@media screen and (max-width: 375px) {
+  :root {
+    font-size: 14px;
+  }
+}
+
+@media screen and (min-width: 376px) and (max-width: 414px) {
+  :root {
+    font-size: 15px;
+  }
+}
+
+@media screen and (min-width: 415px) {
+  :root {
+    font-size: 16px;
+  }
+}
+
+/* 数字等宽显示 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 防止文字选择 */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 平滑滚动 */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 隐藏滚动条 */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 卡片触摸反馈 */
+.touchable-card {
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.touchable-card:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* 按钮触摸反馈 */
+.touchable-button {
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.touchable-button:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+/* 加载动画 */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* 骨架屏动画 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--muted-foreground) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}

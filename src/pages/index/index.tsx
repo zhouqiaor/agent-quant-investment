@@ -121,8 +121,8 @@ const IndexPage = () => {
   }
 
   return (
-    <ScrollView scrollY className="h-full bg-slate-900">
-      <View className="px-4 pb-24 gap-4 flex flex-col">
+    <ScrollView scrollY className="h-full bg-slate-900 smooth-scroll hide-scrollbar tabbar-page">
+      <View className="px-4 pb-8 gap-4 flex flex-col">
         {/* 资产概览卡片 */}
         <Card className="bg-slate-800 border-slate-700 mt-4">
           <CardContent className="p-5">

@@ -95,8 +95,8 @@ const MarketPage = () => {
         </View>
 
         <TabsContent value={tab} className="flex-1">
-          <ScrollView scrollY className="flex-1">
-            <View className="px-4 pb-24">
+          <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
+            <View className="px-4 pb-20">
               {/* 表头 */}
               <View className="flex flex-row items-center justify-between py-2 border-b border-slate-700">
                 <Text className="block text-xs text-slate-500 flex-1">币种</Text>

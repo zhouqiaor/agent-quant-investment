@@ -169,6 +169,36 @@ image {
 }
 
 /* H5 端基础优化 */
+html, body {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: #070a0f;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Taro H5 页面容器宽度保障 */
+.taro_router,
+.taro_page,
+.taro-tabbar,
+.taro-tabbar__container {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.taro_page {
+  min-height: 100vh;
+}
+
 @media (hover: none) and (pointer: coarse) {
   /* 移动端触摸优化 */
   * {
@@ -217,25 +247,6 @@ image {
   left: 0;
   right: 0;
   z-index: 100;
-}
-
-/* 移动端字体优化 */
-@media screen and (max-width: 375px) {
-  :root {
-    font-size: 14px;
-  }
-}
-
-@media screen and (min-width: 376px) and (max-width: 414px) {
-  :root {
-    font-size: 15px;
-  }
-}
-
-@media screen and (min-width: 415px) {
-  :root {
-    font-size: 16px;
-  }
 }
 
 /* 数字等宽显示 */

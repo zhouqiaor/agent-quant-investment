@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { PaperTradingService } from './paper-trading.service';
 
 @Controller('paper-trading')
@@ -24,9 +24,11 @@ export class PaperTradingController {
     };
   }
 
+  @HttpCode(200)
   @Post('reset')
-  resetAccount(@Body() body: { accountId?: string; initialCapital?: number }) {
-    const account = this.paperTradingService.resetAccount(body.accountId, body.initialCapital);
+  resetAccount(@Body() body?: { accountId?: string; initialCapital?: number }) {
+    const b = body ?? {};
+    const account = this.paperTradingService.resetAccount(b.accountId, b.initialCapital);
     return {
       code: 200,
       msg: 'success',
@@ -34,9 +36,11 @@ export class PaperTradingController {
     };
   }
 
+  @HttpCode(200)
   @Post('start')
-  startTrading(@Body() body: { accountId?: string; strategyIds?: string[] }) {
-    const account = this.paperTradingService.startTrading(body.accountId, body.strategyIds);
+  startTrading(@Body() body?: { accountId?: string; strategyIds?: string[] }) {
+    const b = body ?? {};
+    const account = this.paperTradingService.startTrading(b.accountId, b.strategyIds);
     return {
       code: 200,
       msg: 'success',
@@ -44,9 +48,11 @@ export class PaperTradingController {
     };
   }
 
+  @HttpCode(200)
   @Post('stop')
-  stopTrading(@Body() body: { accountId?: string }) {
-    const account = this.paperTradingService.stopTrading(body.accountId);
+  stopTrading(@Body() body?: { accountId?: string }) {
+    const b = body ?? {};
+    const account = this.paperTradingService.stopTrading(b.accountId);
     return {
       code: 200,
       msg: 'success',
@@ -78,6 +84,7 @@ export class PaperTradingController {
     };
   }
 
+  @HttpCode(200)
   @Post('execute')
   executeSignal(@Body() body: {
     accountId?: string;
@@ -96,6 +103,7 @@ export class PaperTradingController {
     };
   }
 
+  @HttpCode(200)
   @Post('simulate')
   async simulateAutoTrading(@Body() body: { accountId?: string }) {
     const result = await this.paperTradingService.simulateAutoTrading(body.accountId);

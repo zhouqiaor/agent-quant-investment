@@ -11,9 +11,12 @@ import { StockModule } from '@/stock/stock.module';
 import { AgentAnalysisModule } from '@/agent-analysis/agent-analysis.module';
 import { BacktestModule } from '@/backtest/backtest.module';
 import { PaperTradingModule } from '@/paper-trading/paper-trading.module';
+import { PersistenceModule } from '@/persistence/persistence.module';
+import { OptimizerModule } from '@/optimizer/optimizer.module';
+import { NotificationModule } from '@/notification/notification.module';
 
 @Module({
-  imports: [MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule],
+  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule],
   controllers: [AppController],
   providers: [AppService],
 })

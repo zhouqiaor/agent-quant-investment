@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { BacktestService } from './backtest.service';
 
 @Controller('backtest')
 export class BacktestController {
   constructor(private readonly backtestService: BacktestService) {}
 
+  @HttpCode(200)
   @Post('run')
   async runBacktest(@Body() body: {
     strategyId?: string;

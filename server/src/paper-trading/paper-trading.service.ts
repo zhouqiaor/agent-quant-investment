@@ -146,7 +146,7 @@ export class PaperTradingService {
 
   private executeBuy(
     account: PaperAccount,
-    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string },
+    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
   ): { success: boolean; message: string; trade?: PaperTrade } {
     // 检查是否已持仓
     const existingPosition = account.positions.find(p => p.symbol === signal.symbol);
@@ -154,9 +154,12 @@ export class PaperTradingService {
       return { success: false, message: `已持仓 ${signal.name}，跳过买入` };
     }
 
-    // 计算可买数量（使用80%资金，A股100股整数倍）
+    // 计算可买数量：优先使用信号指定的数量，否则使用80%资金（A股100股整数倍）
     const availableCash = account.cash * 0.8;
-    const quantity = Math.floor(availableCash / signal.price / 100) * 100;
+    const maxAffordable = Math.floor(availableCash / signal.price / 100) * 100;
+    const quantity = signal.quantity && signal.quantity > 0
+      ? Math.min(signal.quantity, maxAffordable)
+      : maxAffordable;
 
     if (quantity <= 0) {
       return { success: false, message: '可用资金不足' };
@@ -201,7 +204,7 @@ export class PaperTradingService {
 
   private executeSell(
     account: PaperAccount,
-    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string },
+    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
   ): { success: boolean; message: string; trade?: PaperTrade } {
     // 查找持仓
     const positionIndex = account.positions.findIndex(p => p.symbol === signal.symbol);

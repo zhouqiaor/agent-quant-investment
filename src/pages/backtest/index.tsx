@@ -58,6 +58,24 @@ export default function BacktestPage() {
   const [result, setResult] = useState<BacktestResult | null>(null)
 
   const handleBacktest = async () => {
+    const capital = parseInt(initialCapital)
+    if (!Number.isFinite(capital) || capital <= 0) {
+      Taro.showToast({ title: '初始资金必须大于0', icon: 'none' })
+      return
+    }
+    if (capital > 1e9) {
+      Taro.showToast({ title: '初始资金不能超过10亿', icon: 'none' })
+      return
+    }
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/
+    if (!dateRe.test(startDate) || !dateRe.test(endDate)) {
+      Taro.showToast({ title: '日期格式需为 YYYY-MM-DD', icon: 'none' })
+      return
+    }
+    if (startDate >= endDate) {
+      Taro.showToast({ title: '开始日期需早于结束日期', icon: 'none' })
+      return
+    }
     setLoading(true)
     try {
       const res = await Network.request({
@@ -67,15 +85,19 @@ export default function BacktestPage() {
           symbol,
           startDate,
           endDate,
-          initialCapital: parseInt(initialCapital),
+          initialCapital: capital,
           indicators,
         },
       })
       console.log('回测结果:', res.data)
-      setResult(res.data?.data || null)
-    } catch (error) {
+      if (res.data?.data) {
+        setResult(res.data.data)
+      } else {
+        Taro.showToast({ title: res.data?.message || res.data?.msg || '回测失败', icon: 'none' })
+      }
+    } catch (error: any) {
       console.error('回测失败:', error)
-      Taro.showToast({ title: '回测失败', icon: 'error' })
+      Taro.showToast({ title: error?.data?.message || error?.message || '回测失败', icon: 'none' })
     } finally {
       setLoading(false)
     }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
 import { MarketService } from '../market/market.service';
 
@@ -67,6 +67,36 @@ export class BacktestService {
     private readonly marketService: MarketService,
   ) {}
 
+  /**
+   * 校验回测金额与时间段（SPEC-custom 2.2）
+   * - 金额: >0 且 ≤1e9
+   * - 日期: YYYY-MM-DD 格式, start < end, 跨度 ≤3650 天
+   */
+  private validateParams(initialCapital: number, startDate: string, endDate: string): void {
+    const capital = Number(initialCapital);
+    if (!Number.isFinite(capital) || capital <= 0) {
+      throw new BadRequestException(`初始资金必须大于0: ${initialCapital}`);
+    }
+    if (capital > 1e9) {
+      throw new BadRequestException(`初始资金不能超过1e9: ${capital}`);
+    }
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRe.test(startDate || '') || !dateRe.test(endDate || '')) {
+      throw new BadRequestException(`日期格式必须为 YYYY-MM-DD: start=${startDate}, end=${endDate}`);
+    }
+    const start = new Date(`${startDate}T00:00:00Z`).getTime();
+    const end = new Date(`${endDate}T00:00:00Z`).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      throw new BadRequestException(`日期格式必须为 YYYY-MM-DD: start=${startDate}, end=${endDate}`);
+    }
+    if (start >= end) {
+      throw new BadRequestException(`开始日期必须早于结束日期: ${startDate} >= ${endDate}`);
+    }
+    if (end - start > 3650 * 24 * 3600 * 1000) {
+      throw new BadRequestException(`回测跨度不能超过3650天: ${startDate} ~ ${endDate}`);
+    }
+  }
+
   async runBacktest(request: BacktestRequest): Promise<BacktestResult> {
     const {
       strategyId,
@@ -78,6 +108,9 @@ export class BacktestService {
       buyConditions = [],
       sellConditions = [],
     } = request;
+
+    // 参数校验：金额与时间段（SPEC-custom 2.2）
+    this.validateParams(initialCapital, startDate, endDate);
 
     // 获取策略信息
     let strategyName = '自定义策略';
@@ -216,9 +249,9 @@ export class BacktestService {
 
       // 执行交易
       if (buySignal && position === 0) {
-        // 买入：使用80%资金
+        // 买入：使用80%资金（浮点份额，保证收益与本金严格等比，规避整手限制对小资金的失真）
         const buyAmount = cash * 0.8;
-        const quantity = Math.floor(buyAmount / today.close / 100) * 100; // A股100股整数倍
+        const quantity = Math.round((buyAmount / today.close) * 10000) / 10000;
         if (quantity > 0) {
           const cost = quantity * today.close;
           cash -= cost;

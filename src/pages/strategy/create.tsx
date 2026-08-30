@@ -128,6 +128,7 @@ interface StockSearchResult {
   pe: number
   pb: number
   roe: number
+  isCustom?: boolean
 }
 
 // Agent 分析结果
@@ -147,6 +148,7 @@ const StrategyCreatePage = () => {
   const [selectedStock, setSelectedStock] = useState('')
   const [selectedStockInfo, setSelectedStockInfo] = useState<StockSearchResult | null>(null)
   const [showStockPicker, setShowStockPicker] = useState(false)
+  const [addingCustom, setAddingCustom] = useState(false)
   const [stockSearch, setStockSearch] = useState('')
   const [stockSearchResults, setStockSearchResults] = useState<StockSearchResult[]>([])
   const [searchingStock, setSearchingStock] = useState(false)
@@ -291,6 +293,47 @@ const StrategyCreatePage = () => {
   const searchStocksDebounced = (query: string) => {
     if (searchTimer) clearTimeout(searchTimer)
     searchTimer = setTimeout(() => searchStocks(query), 300)
+  }
+
+  // 添加为自定义股票（A股6位代码），成功后自动选中新股票
+  const canAddCustom =
+    /^\d{6}$/.test(stockSearch.trim()) &&
+    !stockSearchResults.some((s) => s.symbol === stockSearch.trim()) &&
+    !addingCustom
+
+  const handleAddCustomStock = async () => {
+    const symbol = stockSearch.trim()
+    if (!/^\d{6}$/.test(symbol)) {
+      Taro.showToast({ title: '仅支持A股6位代码', icon: 'none' })
+      return
+    }
+    setAddingCustom(true)
+    try {
+      const res = await Network.request({
+        url: '/api/stock/custom',
+        method: 'POST',
+        data: { symbol },
+      })
+      console.log('add custom stock:', res.data)
+      if (res.data?.code !== 200) {
+        Taro.showToast({ title: res.data?.msg || '添加失败', icon: 'none' })
+        return
+      }
+      const stock = res.data?.data
+      Taro.showToast({ title: `已添加 ${stock?.name || symbol}`, icon: 'success' })
+      setShowStockPicker(false)
+      if (stock) {
+        setSelectedStock(stock.symbol)
+        setSelectedStockInfo({ ...stock, industry: stock.industry || '自定义' })
+      }
+      setStockSearch('')
+      setStockSearchResults([])
+    } catch (e) {
+      console.error('addCustomStock error:', e)
+      Taro.showToast({ title: '添加失败', icon: 'none' })
+    } finally {
+      setAddingCustom(false)
+    }
   }
 
   // Agent 分析
@@ -500,6 +543,11 @@ const StrategyCreatePage = () => {
                                 >
                                   {s.market}
                                 </Badge>
+                                {s.isCustom && (
+                                  <Badge className="bg-emerald-500 bg-opacity-20 text-emerald-400 border-emerald-500 border-opacity-30">
+                                    自定义
+                                  </Badge>
+                                )}
                                 <Text className="block text-xs text-slate-500">{s.industry}</Text>
                               </View>
                               <View className="flex flex-row items-center gap-2">
@@ -517,6 +565,18 @@ const StrategyCreatePage = () => {
                         ))}
                       </View>
                     </ScrollView>
+                  </View>
+                )}
+
+                {canAddCustom && (
+                  <View
+                    className="flex flex-row items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-emerald-500 border-opacity-40 bg-emerald-500 bg-opacity-5"
+                    onClick={handleAddCustomStock}
+                  >
+                    <Plus size={14} color="#34d399" />
+                    <Text className="block text-xs text-emerald-400">
+                      {addingCustom ? '添加中...' : `将 ${stockSearch.trim()} 添加为自定义股票`}
+                    </Text>
                   </View>
                 )}
 

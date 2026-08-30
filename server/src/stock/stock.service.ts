@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { PersistenceService } from '@/persistence/persistence.service';
 import * as iconv from 'iconv-lite';
 
 export interface StockInfo {
@@ -17,6 +18,7 @@ export interface StockInfo {
   high52w: number;
   low52w: number;
   timestamp?: string;
+  isCustom?: boolean;
 }
 
 export interface KlineData {
@@ -59,6 +61,7 @@ const STOCK_NAMES: Record<string, string> = {
 
 @Injectable()
 export class StockService {
+  constructor(private readonly persistence: PersistenceService) {}
   private readonly logger = new Logger(StockService.name);
   private realtimeCache: Map<string, StockInfo> = new Map();
   private lastFetchTime = 0;
@@ -231,6 +234,55 @@ export class StockService {
   /**
    * Search stocks (by code or name)
    */
+  /**
+   * 添加自定义股票：仅支持A股6位代码（6/0/3开头），名称可自定义
+   * 自动从静态库或实时行情识别名称
+   */
+  async addCustomStock(symbol: string, name?: string) {
+    const code = (symbol || '').trim().toUpperCase();
+    if (!code) throw new BadRequestException('股票代码不能为空');
+    if (!this.isValidSymbol(code)) {
+      throw new BadRequestException(`无效的股票代码: ${code}（仅支持A股6位代码，6/0/3开头）`);
+    }
+    let stockName = (name || '').trim() || STOCK_NAMES[code] || '';
+    if (!stockName) {
+      try {
+        const quote = await this.fetchRealtimeQuote(code);
+        stockName = quote?.name || code;
+      } catch {
+        stockName = code;
+      }
+    }
+    const existing = this.persistence
+      .listCustomStocks()
+      .find(s => s.symbol === code);
+    if (existing) {
+      return { symbol: existing.symbol, name: existing.name, market: existing.market, isCustom: true };
+    }
+    this.persistence.saveCustomStock({ symbol: code, name: stockName, market: this.detectMarket(code) });
+    return { symbol: code, name: stockName, market: this.detectMarket(code), isCustom: true };
+  }
+
+  listCustomStocks() {
+    return this.persistence.listCustomStocks().map(s => ({ ...s, isCustom: true }));
+  }
+
+  removeCustomStock(symbol: string): boolean {
+    return this.persistence.deleteCustomStock((symbol || '').trim().toUpperCase());
+  }
+
+  private isValidSymbol(code: string): boolean {
+    // A股: 6位数字且以 6(沪)/0(深)/3(创业板) 开头
+    if (/^[036][0-9]{5}$/.test(code)) return true;
+    return false;
+  }
+
+  private detectMarket(code: string): string {
+    if (/^[0-9]{6}$/.test(code)) return 'A';
+    if (/^[0-9]{4,5}$/.test(code)) return 'HK';
+    return 'US';
+  }
+
   searchStocks(query: string): StockInfo[] {
     if (!query || query.trim() === '') {
       return Object.keys(STOCK_NAMES).slice(0, 10).map(symbol => ({
@@ -252,6 +304,27 @@ export class StockService {
     }
 
     const q = query.toLowerCase().trim();
+    const customStocks = this.persistence
+      .listCustomStocks()
+      .filter(s => s.symbol.includes(q) || s.name.toLowerCase().includes(q))
+      .map(s => ({
+        symbol: s.symbol,
+        name: s.name,
+        market: (s.market || 'A') as 'A' | 'HK' | 'US',
+        industry: '自定义',
+        price: 0,
+        change: 0,
+        changePercent: 0,
+        volume: 0,
+        marketCap: 0,
+        pe: 0,
+        pb: 0,
+        roe: 0,
+        high52w: 0,
+        low52w: 0,
+        isCustom: true as const,
+      }));
+    const customSymbols = new Set(customStocks.map(s => s.symbol));
     const results = Object.entries(STOCK_NAMES)
       .filter(([symbol, name]) => 
         symbol.includes(q) || name.toLowerCase().includes(q)
@@ -273,7 +346,7 @@ export class StockService {
         low52w: STOCK_METADATA[symbol]?.low52w || 0,
       }));
 
-    return results;
+    return [...customStocks, ...results.filter(r => !customSymbols.has(r.symbol))];
   }
 
   /**

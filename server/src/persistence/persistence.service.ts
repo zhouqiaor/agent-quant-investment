@@ -60,6 +60,13 @@ export interface BacktestResultRecord {
   createdAt?: string;
 }
 
+export interface CustomStockRecord {
+  symbol: string;
+  name: string;
+  market?: string;
+  createdAt?: number;
+}
+
 export interface OptimizationRecord {
   id?: string;
   symbol?: string;
@@ -192,6 +199,12 @@ export class PersistenceService implements OnModuleInit {
         extra TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS custom_stocks (
+        symbol TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        market TEXT DEFAULT 'A',
+        createdAt INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS notifications (
         id TEXT PRIMARY KEY,
         type TEXT,
@@ -283,6 +296,25 @@ export class PersistenceService implements OnModuleInit {
       .prepare('SELECT * FROM optimizations ORDER BY createdAt DESC')
       .all()
       .map((r: any) => this.mapOptimization(r));
+  }
+
+  // ==================== 自定义股票 ====================
+  saveCustomStock(stock: { symbol: string; name: string; market?: string; createdAt?: number }): void {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO custom_stocks (symbol, name, market, createdAt) VALUES (?, ?, ?, ?)'
+      )
+      .run(stock.symbol, stock.name, stock.market || 'A', stock.createdAt || Date.now());
+  }
+
+  listCustomStocks(): Array<{ symbol: string; name: string; market: string; createdAt: number }> {
+    return this.db
+      .prepare('SELECT symbol, name, market, createdAt FROM custom_stocks ORDER BY createdAt DESC')
+      .all() as Array<{ symbol: string; name: string; market: string; createdAt: number }>;
+  }
+
+  deleteCustomStock(symbol: string): boolean {
+    return this.db.prepare('DELETE FROM custom_stocks WHERE symbol = ?').run(symbol).changes > 0;
   }
 
   // ==================== 通知 ====================

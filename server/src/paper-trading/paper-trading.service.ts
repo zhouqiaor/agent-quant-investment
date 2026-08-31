@@ -69,6 +69,42 @@ export class PaperTradingService {
     });
   }
 
+  /**
+   * 按最新价格快照重估全部持仓（实时看盘核心）：
+   * 更新 position.currentPrice/marketValue/pnl/pnlRate 与账户 totalValue/totalPnl/totalPnlRate
+   * @returns 更新后的账户
+   */
+  markPrices(prices: Record<string, number>, accountId?: string): PaperAccount {
+    const account = this.getAccount(accountId);
+    let totalMarketValue = 0;
+    let changed = false;
+    for (const pos of account.positions) {
+      const price = prices[pos.symbol];
+      if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) continue;
+      pos.currentPrice = price;
+      pos.marketValue = this.round2(pos.quantity * price);
+      pos.pnl = this.round2(pos.marketValue - pos.quantity * pos.avgCost);
+      pos.pnlRate = pos.avgCost > 0 ? this.round2(((price - pos.avgCost) / pos.avgCost) * 100) : 0;
+      changed = true;
+    }
+    for (const pos of account.positions) {
+      totalMarketValue += pos.marketValue;
+    }
+    if (changed) {
+      account.totalValue = this.round2(account.cash + totalMarketValue);
+      account.totalPnl = this.round2(account.totalValue - account.initialCapital);
+      account.totalPnlRate =
+        account.initialCapital > 0
+          ? this.round2((account.totalPnl / account.initialCapital) * 100)
+          : 0;
+    }
+    return account;
+  }
+
+  private round2(n: number): number {
+    return Math.round(n * 100) / 100;
+  }
+
   getAccount(accountId?: string): PaperAccount {
     const id = accountId || this.defaultAccountId;
     let account = this.accounts.get(id);
@@ -127,6 +163,7 @@ export class PaperTradingService {
       price: number;
       reason: string;
       strategyId: string;
+      quantity?: number;
     },
     accountId?: string,
   ): { success: boolean; message: string; trade?: PaperTrade } {

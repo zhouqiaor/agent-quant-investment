@@ -7,6 +7,7 @@ export default typeof defineAppConfig === 'function'
       'pages/strategy/create',
       'pages/backtest/index',
       'pages/paper-trading/index',
+      'pages/onboarding/index',
       'pages/profile/index'
     ],
     window: {
@@ -54,6 +55,10 @@ export default typeof defineAppConfig === 'function'
       'pages/index/index',
       'pages/market/index',
       'pages/strategy/index',
+      'pages/strategy/create',
+      'pages/backtest/index',
+      'pages/paper-trading/index',
+      'pages/onboarding/index',
       'pages/profile/index'
     ],
     window: {

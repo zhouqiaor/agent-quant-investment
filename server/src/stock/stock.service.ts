@@ -48,7 +48,7 @@ const STOCK_METADATA: Record<string, Partial<StockInfo>> = {
 };
 
 // Default stock names for search
-const STOCK_NAMES: Record<string, string> = {
+export const STOCK_NAMES: Record<string, string> = {
   '600519': '贵州茅台', '000858': '五粮液', '300750': '宁德时代',
   '002594': '比亚迪', '601318': '中国平安', '600036': '招商银行',
   '000001': '平安银行', '601012': '隆基绿能', '002475': '立讯精密',

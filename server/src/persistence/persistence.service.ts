@@ -108,10 +108,20 @@ export class PersistenceService implements OnModuleInit {
   }
   private readonly logger = new Logger(PersistenceService.name);
   private db: Database.Database;
-  private readonly dbPath: string;
+  private dbPath: string;
 
   constructor(@Optional() dbPath?: string) {
     this.dbPath = dbPath || process.env.SQLITE_PATH || 'data/quant.db';
+  }
+
+  /** 测试基建：切换存储路径并重新初始化（关闭旧连接，建新库） */
+  setDbPath(path: string): void {
+    if (this.db) {
+      this.db.close();
+      this.db = null as unknown as Database.Database;
+    }
+    this.dbPath = path;
+    this.init();
   }
 
   init() {
@@ -204,6 +214,17 @@ export class PersistenceService implements OnModuleInit {
         name TEXT NOT NULL,
         market TEXT DEFAULT 'A',
         createdAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS watch_stocks (
+        symbol TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        createdAt INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS beta_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS notifications (
         id TEXT PRIMARY KEY,
@@ -315,6 +336,61 @@ export class PersistenceService implements OnModuleInit {
 
   deleteCustomStock(symbol: string): boolean {
     return this.db.prepare('DELETE FROM custom_stocks WHERE symbol = ?').run(symbol).changes > 0;
+  }
+
+  // ==================== 关注列表（Watchlist） ====================
+  saveWatch(w: { symbol: string; name: string; enabled?: boolean; createdAt?: number }): void {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO watch_stocks (symbol, name, enabled, createdAt) VALUES (?, ?, ?, ?)'
+      )
+      .run(w.symbol, w.name, w.enabled === false ? 0 : 1, w.createdAt || Date.now());
+  }
+
+  listWatches(): Array<{ symbol: string; name: string; enabled: boolean; createdAt: number }> {
+    return this.db
+      .prepare('SELECT symbol, name, enabled, createdAt FROM watch_stocks')
+      .all()
+      .map((r: any) => ({
+        symbol: r.symbol,
+        name: r.name,
+        enabled: !!r.enabled,
+        createdAt: r.createdAt,
+      })) as Array<{ symbol: string; name: string; enabled: boolean; createdAt: number }>;
+  }
+
+  updateWatchEnabled(symbol: string, enabled: boolean): boolean {
+    return this.db
+      .prepare('UPDATE watch_stocks SET enabled = ? WHERE symbol = ?')
+      .run(enabled ? 1 : 0, symbol).changes > 0;
+  }
+
+  deleteWatch(symbol: string): boolean {
+    return this.db.prepare('DELETE FROM watch_stocks WHERE symbol = ?').run(symbol).changes > 0;
+  }
+
+  // ==================== 内测配置（BetaConfig） ====================
+  /** 测试辅助：执行原始 SQL（E2E 种子数据用） */
+  execRaw(sql: string): void {
+    this.db.exec(sql);
+  }
+
+  saveBetaConfig(key: string, value: unknown): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO beta_config (key, value, updatedAt) VALUES (?, ?, ?)')
+      .run(key, JSON.stringify(value), Date.now());
+  }
+
+  getBetaConfig<T>(key: string): T | null {
+    const row = this.db.prepare('SELECT value FROM beta_config WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.value) as T;
+    } catch {
+      return null;
+    }
   }
 
   // ==================== 通知 ====================

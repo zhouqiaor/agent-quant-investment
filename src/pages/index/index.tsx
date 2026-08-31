@@ -1,178 +1,258 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Taro from '@tarojs/taro'
 import { Network } from '@/network'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
-  TrendingUp,
-  TrendingDown,
   Wallet,
   Activity,
-  Zap,
   ArrowUpRight,
   ArrowDownRight,
-  Brain,
-  Shield,
+  Zap,
+  Bell,
+  Rocket,
+  Eye,
+  RefreshCw,
 } from 'lucide-react-taro'
 
-interface AssetInfo {
-  totalAssets: number
-  todayPnl: number
-  todayPnlRate: number
-  totalPnl: number
-  totalPnlRate: number
-  availableBalance: number
-  frozenBalance: number
+interface WatchItem {
+  symbol: string
+  name: string
+  enabled: boolean
 }
 
 interface PositionItem {
-  name: string
   symbol: string
-  value: number
-  percentage: number
+  name: string
+  quantity: number
+  avgCost: number
+  currentPrice: number
+  marketValue: number
   pnl: number
   pnlRate: number
 }
 
-interface AgentStatus {
-  isActive: boolean
-  strategy: string
-  signals: number
-  trades: number
-  winRate: number
+interface AccountInfo {
+  cash: number
+  totalValue: number
+  totalPnl: number
+  totalPnlRate: number
+  isRunning: boolean
+  positions: PositionItem[]
 }
 
-interface SignalItem {
+interface NotifyItem {
   id: string
-  type: 'buy' | 'sell'
-  symbol: string
-  price: number
-  reason: string
-  time: string
+  title: string
+  content?: string
+  type?: string
+  createdAt?: number
 }
+
+interface StatusInfo {
+  configured: boolean
+  config: { initialCapital?: number; strategyId?: string; autoTrade?: boolean } | null
+  totalValue: number
+  totalPnl: number
+  totalPnlRate: number
+  cash: number
+  positions: PositionItem[]
+  watchedEnabled: number
+  isRunning: boolean
+}
+
+const POLL_INTERVAL = 6000
 
 const IndexPage = () => {
-  const [asset, setAsset] = useState<AssetInfo>({
-    totalAssets: 0,
-    todayPnl: 0,
-    todayPnlRate: 0,
-    totalPnl: 0,
-    totalPnlRate: 0,
-    availableBalance: 0,
-    frozenBalance: 0,
-  })
-  const [positions, setPositions] = useState<PositionItem[]>([])
-  const [agent, setAgent] = useState<AgentStatus>({
-    isActive: false,
-    strategy: '',
-    signals: 0,
-    trades: 0,
-    winRate: 0,
-  })
-  const [signals, setSignals] = useState<SignalItem[]>([])
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [assetRes, posRes, agentRes, signalRes] = await Promise.all([
-        Network.request({ url: '/api/assets/overview' }),
-        Network.request({ url: '/api/assets/positions' }),
-        Network.request({ url: '/api/agent/status' }),
-        Network.request({ url: '/api/agent/signals?limit=3' }),
-      ])
-      console.log('asset:', assetRes.data)
-      console.log('positions:', posRes.data)
-      console.log('agent:', agentRes.data)
-      console.log('signals:', signalRes.data)
-
-      const ad = assetRes.data?.data
-      if (ad) setAsset(ad)
-
-      const pd = posRes.data?.data
-      if (pd) setPositions(pd)
-
-      const ag = agentRes.data?.data
-      if (ag) setAgent(ag)
-
-      const sg = signalRes.data?.data
-      if (sg) setSignals(sg)
-    } catch (e) {
-      console.error('loadData error:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [status, setStatus] = useState<StatusInfo | null>(null)
+  const [watchlist, setWatchlist] = useState<WatchItem[]>([])
+  const [notifications, setNotifications] = useState<NotifyItem[]>([])
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastTickAt, setLastTickAt] = useState<number>(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const formatMoney = (val: number) => {
-    if (val >= 10000) return `${(val / 10000).toFixed(2)}万`
+    if (Math.abs(val) >= 10000) return `${(val / 10000).toFixed(2)}万`
     return val.toFixed(2)
   }
 
-  const formatPnl = (val: number) => {
-    const prefix = val >= 0 ? '+' : ''
-    return `${prefix}${val.toFixed(2)}`
+  const fmtPct = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+  const fmtPnl = (val: number) => `${val >= 0 ? '+' : ''}${formatMoney(val)}`
+
+  /** 拉取关注列表启用标的的真实行情，驱动后端实时重估+信号引擎 */
+  const tickOnce = useCallback(async () => {
+    try {
+      setRefreshing(true)
+      const wlRes = await Network.request({ url: '/api/stock/watchlist' })
+      const wl: WatchItem[] = Array.isArray(wlRes.data?.data) ? wlRes.data.data : []
+      setWatchlist(wl)
+
+      const statusRes = await Network.request({ url: '/api/beta/status' })
+      const st = statusRes.data?.data
+      setStatus(st)
+      if (!st?.configured) {
+        setLoading(false)
+        return
+      }
+
+      // 启用标的 → 拉真实行情 → 后端重估 + 信号检测
+      const enabled = wl.filter((w) => w.enabled)
+      if (enabled.length > 0) {
+        const marketRes = await Network.request({ url: '/api/market/list' })
+        const allQuotes: Array<{ symbol: string; price: number; changePercent: number }> = Array.isArray(
+          marketRes.data?.data,
+        )
+          ? marketRes.data.data
+          : []
+        const enabledSet = new Set(enabled.map((w) => w.symbol))
+        const quotes = allQuotes.filter((q) => enabledSet.has(q.symbol))
+        const marketData = quotes.map((q) => ({
+          symbol: q.symbol,
+          price: q.price,
+          changePercent: q.changePercent ?? 0,
+        }))
+        if (marketData.length > 0) {
+          const tickRes = await Network.request({
+            url: '/api/beta/tick',
+            method: 'POST',
+            data: { marketData },
+          })
+          console.log('beta tick:', tickRes.data)
+        }
+      }
+
+      // tick 后再拉最新账户收益
+      const statusRes2 = await Network.request({ url: '/api/beta/status' })
+      setStatus(statusRes2.data?.data)
+
+      const notifyRes = await Network.request({ url: '/api/notifications?limit=5' })
+      const notes = notifyRes.data?.data
+      setNotifications(Array.isArray(notes) ? notes : Array.isArray(notes?.items) ? notes.items : [])
+      setLastTickAt(Date.now())
+    } catch (e) {
+      console.error('tickOnce error:', e)
+    } finally {
+      setRefreshing(false)
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    tickOnce()
+    timerRef.current = setInterval(tickOnce, POLL_INTERVAL)
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [tickOnce])
+
+  const account: AccountInfo | null =
+    status?.configured && status
+      ? {
+          cash: status.cash ?? 0,
+          totalValue: status.totalValue ?? 0,
+          totalPnl: status.totalPnl ?? 0,
+          totalPnlRate: status.totalPnlRate ?? 0,
+          isRunning: !!status.isRunning,
+          positions: status.positions ?? [],
+        }
+      : null
+
+  const fmtTime = (ts?: number) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
+  // ============ 未配置：内测引导 ============
+  if (!loading && status && !status.configured) {
+    return (
+      <ScrollView scrollY className="h-full bg-slate-900 smooth-scroll hide-scrollbar tabbar-page">
+        <View className="px-4 pb-8 pt-16 flex flex-col gap-6 items-center">
+          <View className="flex items-center justify-center w-20 h-20 rounded-2xl bg-emerald-500 bg-opacity-10">
+            <Rocket size={40} color="#10b981" />
+          </View>
+          <View className="flex flex-col gap-2 items-center">
+            <Text className="block text-xl font-bold text-slate-100">开始内测投资体验</Text>
+            <Text className="block text-sm text-slate-500 text-center">
+              {'三步从零开始：设定投入金额、关注股票、配置策略\nAI Agent 自动监听实时行情并模拟交易'}
+            </Text>
+          </View>
+          <Button
+            className="bg-emerald-500 text-slate-900 rounded-xl px-8"
+            onClick={() => Taro.navigateTo({ url: '/pages/onboarding/index' })}
+          >
+            <View className="flex flex-row items-center gap-2">
+              <Zap size={16} color="#0f172a" />
+              <Text className="block text-base font-semibold">立即开始</Text>
+            </View>
+          </Button>
+        </View>
+      </ScrollView>
+    )
+  }
+
+  const pnlColor = (val: number) => (val >= 0 ? 'text-red-500' : 'text-green-500')
+
   return (
-    <ScrollView scrollY className="h-full bg-slate-900 smooth-scroll hide-scrollbar tabbar-page">
-      <View className="px-4 pb-8 gap-4 flex flex-col">
-        {/* 资产概览卡片 */}
-        <Card className="bg-slate-800 border-slate-700 mt-4">
+    <ScrollView
+      scrollY
+      className="h-full bg-slate-900 smooth-scroll hide-scrollbar tabbar-page"
+    >
+      <View className="px-4 pb-8 pt-4 flex flex-col gap-4">
+        {/* 头部：标题 + 实时状态 */}
+        <View className="flex flex-row items-center justify-between">
+          <View className="flex flex-col gap-0.5">
+            <Text className="block text-lg font-bold text-slate-100">实时看盘</Text>
+            <Text className="block text-xs text-slate-500">
+              {account?.isRunning ? `模拟投资运行中 · ${watchlist.filter((w) => w.enabled).length} 只启用` : '已停止'}
+            </Text>
+          </View>
+          <View className="flex flex-row items-center gap-1.5">
+            {refreshing && <RefreshCw size={12} color="#10b981" />}
+            <Text className="block text-xs text-slate-500">
+              {lastTickAt ? `更新 ${fmtTime(lastTickAt)}` : '连接中...'}
+            </Text>
+          </View>
+        </View>
+
+        {/* 资产总览 */}
+        <Card className="bg-slate-800 border-slate-700">
           <CardContent className="p-5">
             <View className="flex flex-col gap-3">
               <View className="flex flex-row items-center gap-2">
                 <Wallet size={16} color="#94a3b8" />
-                <Text className="block text-xs text-slate-400">总资产 (USDT)</Text>
+                <Text className="block text-xs text-slate-400">模拟账户总资产</Text>
               </View>
-              <Text className="block text-3xl font-bold text-slate-100 tabular-nums">
-                {loading ? '---' : formatMoney(asset.totalAssets)}
-              </Text>
-              <View className="flex flex-row gap-4">
-                <View className="flex flex-row items-center gap-1">
-                  <Text className="block text-xs text-slate-500">今日盈亏</Text>
-                  <Text
-                    className={`block text-sm font-semibold tabular-nums ${
-                      asset.todayPnl >= 0 ? 'text-green-500' : 'text-red-500'
-                    }`}
-                  >
-                    {loading ? '--' : `${formatPnl(asset.todayPnl)} (${asset.todayPnlRate >= 0 ? '+' : ''}${asset.todayPnlRate.toFixed(2)}%)`}
-                  </Text>
-                </View>
-              </View>
+              {loading || !account ? (
+                <Skeleton className="h-9 w-40 bg-slate-700" />
+              ) : (
+                <Text className="block text-3xl font-bold text-slate-100 tabular-nums">
+                  {formatMoney(account.totalValue)}
+                </Text>
+              )}
               <View className="flex flex-row gap-4 mt-1">
                 <View className="flex flex-1 flex-row items-center justify-between bg-slate-900 rounded-lg p-3">
                   <View className="flex flex-col gap-1">
-                    <Text className="block text-xs text-slate-500">累计收益</Text>
-                    <Text
-                      className={`block text-sm font-semibold tabular-nums ${
-                        asset.totalPnl >= 0 ? 'text-green-500' : 'text-red-500'
-                      }`}
-                    >
-                      {formatPnl(asset.totalPnl)}
+                    <Text className="block text-xs text-slate-500">总收益</Text>
+                    <Text className={`block text-sm font-semibold tabular-nums ${account ? pnlColor(account.totalPnl) : 'text-slate-400'}`}>
+                      {account ? `${fmtPnl(account.totalPnl)} (${fmtPct(account.totalPnlRate)})` : '--'}
                     </Text>
                   </View>
-                  {asset.totalPnl >= 0 ? (
-                    <ArrowUpRight size={16} color="#22c55e" />
+                  {account && account.totalPnl >= 0 ? (
+                    <ArrowUpRight size={16} color="#ef4444" />
                   ) : (
-                    <ArrowDownRight size={16} color="#ef4444" />
+                    <ArrowDownRight size={16} color="#22c55e" />
                   )}
                 </View>
                 <View className="flex flex-1 flex-row items-center justify-between bg-slate-900 rounded-lg p-3">
                   <View className="flex flex-col gap-1">
-                    <Text className="block text-xs text-slate-500">收益率</Text>
-                    <Text
-                      className={`block text-sm font-semibold tabular-nums ${
-                        asset.totalPnlRate >= 0 ? 'text-green-500' : 'text-red-500'
-                      }`}
-                    >
-                      {asset.totalPnlRate >= 0 ? '+' : ''}{asset.totalPnlRate.toFixed(2)}%
+                    <Text className="block text-xs text-slate-500">可用现金</Text>
+                    <Text className="block text-sm font-semibold tabular-nums text-slate-100">
+                      {account ? formatMoney(account.cash) : '--'}
                     </Text>
                   </View>
                   <Activity size={16} color="#3b82f6" />
@@ -182,206 +262,107 @@ const IndexPage = () => {
           </CardContent>
         </Card>
 
-        {/* Agent 状态卡片 */}
+        {/* 持仓明细（实时价格/浮盈） */}
         <Card className="bg-slate-800 border-slate-700">
           <CardContent className="p-4">
-            <View className="flex flex-row items-center justify-between">
+            <View className="flex flex-col gap-3">
               <View className="flex flex-row items-center gap-2">
-                <View
-                  className={`flex items-center justify-center w-8 h-8 rounded-lg ${
-                    agent.isActive ? 'bg-emerald-500 bg-opacity-20' : 'bg-slate-700'
-                  }`}
-                >
-                  <Brain size={18} color={agent.isActive ? '#10b981' : '#64748b'} />
-                </View>
-                <View className="flex flex-col gap-1">
-                  <Text className="block text-sm font-semibold text-slate-100">
-                    AI Agent
-                  </Text>
-                  <Text className="block text-xs text-slate-500">
-                    {agent.strategy || '未配置策略'}
+                <Eye size={14} color="#10b981" />
+                <Text className="block text-sm font-semibold text-slate-100">持仓明细</Text>
+              </View>
+              {!account || account.positions.length === 0 ? (
+                <View className="bg-slate-900 rounded-lg p-4">
+                  <Text className="block text-xs text-slate-500 text-center">
+                    暂无持仓 · 信号触发后将自动模拟买入
                   </Text>
                 </View>
-              </View>
-              <Badge
-                className={
-                  agent.isActive
-                    ? 'bg-emerald-500 bg-opacity-20 text-emerald-400 border-emerald-500 border-opacity-30'
-                    : 'bg-slate-700 text-slate-400 border-slate-600'
-                }
-              >
-                {agent.isActive ? '运行中' : '已停止'}
-              </Badge>
-            </View>
-            {agent.isActive && (
-              <View className="flex flex-row gap-3 mt-3">
-                <View className="flex flex-1 flex-col items-center bg-slate-900 rounded-lg p-2">
-                  <Text className="block text-xs text-slate-500">今日信号</Text>
-                  <Text className="block text-lg font-bold text-amber-500 tabular-nums">
-                    {agent.signals}
-                  </Text>
-                </View>
-                <View className="flex flex-1 flex-col items-center bg-slate-900 rounded-lg p-2">
-                  <Text className="block text-xs text-slate-500">执行交易</Text>
-                  <Text className="block text-lg font-bold text-blue-500 tabular-nums">
-                    {agent.trades}
-                  </Text>
-                </View>
-                <View className="flex flex-1 flex-col items-center bg-slate-900 rounded-lg p-2">
-                  <Text className="block text-xs text-slate-500">胜率</Text>
-                  <Text className="block text-lg font-bold text-emerald-500 tabular-nums">
-                    {agent.winRate}%
-                  </Text>
-                </View>
-              </View>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 持仓分布 */}
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <View className="flex flex-row items-center justify-between mb-3">
-              <Text className="block text-sm font-semibold text-slate-100">持仓分布</Text>
-              <Text className="block text-xs text-slate-500">
-                {positions.length} 个币种
-              </Text>
-            </View>
-            {positions.length === 0 ? (
-              <View className="flex items-center justify-center py-6">
-                <Text className="block text-sm text-slate-500">暂无持仓</Text>
-              </View>
-            ) : (
-              <View className="flex flex-col gap-3">
-                {positions.map((pos) => (
-                  <View key={pos.symbol} className="flex flex-col gap-2">
-                    <View className="flex flex-row items-center justify-between">
-                      <View className="flex flex-row items-center gap-2">
-                        <Text className="block text-sm font-medium text-slate-100">
-                          {pos.symbol}
-                        </Text>
-                        <Text className="block text-xs text-slate-500">{pos.name}</Text>
-                      </View>
-                      <View className="flex flex-row items-center gap-2">
-                        <Text
-                          className={`block text-xs font-medium tabular-nums ${
-                            pos.pnl >= 0 ? 'text-green-500' : 'text-red-500'
-                          }`}
-                        >
-                          {pos.pnl >= 0 ? '+' : ''}{pos.pnlRate.toFixed(2)}%
-                        </Text>
-                        <Text className="block text-xs text-slate-400 tabular-nums">
-                          {pos.percentage.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <Progress value={pos.percentage} className="bg-slate-700 h-2" />
-                  </View>
-                ))}
-              </View>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 最新交易信号 */}
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <View className="flex flex-row items-center justify-between mb-3">
-              <View className="flex flex-row items-center gap-2">
-                <Zap size={14} color="#f59e0b" />
-                <Text className="block text-sm font-semibold text-slate-100">
-                  交易信号
-                </Text>
-              </View>
-              <Text className="block text-xs text-emerald-500">查看全部</Text>
-            </View>
-            {signals.length === 0 ? (
-              <View className="flex items-center justify-center py-6">
-                <Text className="block text-sm text-slate-500">暂无交易信号</Text>
-              </View>
-            ) : (
-              <View className="flex flex-col gap-2">
-                {signals.map((sig) => (
-                  <View
-                    key={sig.id}
-                    className="flex flex-row items-center justify-between bg-slate-900 rounded-lg p-3"
-                  >
-                    <View className="flex flex-row items-center gap-2">
-                      {sig.type === 'buy' ? (
-                        <TrendingUp size={16} color="#22c55e" />
-                      ) : (
-                        <TrendingDown size={16} color="#ef4444" />
-                      )}
-                      <View className="flex flex-col gap-1">
+              ) : (
+                <View className="flex flex-col gap-2">
+                  {account.positions.map((p) => (
+                    <View key={p.symbol} className="flex flex-row items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
+                      <View className="flex flex-col gap-0.5">
                         <View className="flex flex-row items-center gap-2">
-                          <Text className="block text-sm font-medium text-slate-100">
-                            {sig.type === 'buy' ? '买入' : '卖出'} {sig.symbol}
-                          </Text>
-                          <Badge
-                            className={`text-xs ${
-                              sig.type === 'buy'
-                                ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500 border-opacity-30'
-                                : 'bg-red-500 bg-opacity-20 text-red-400 border-red-500 border-opacity-30'
-                            }`}
-                          >
-                            {sig.type === 'buy' ? 'LONG' : 'SHORT'}
-                          </Badge>
+                          <Text className="block text-sm text-slate-100">{p.name || p.symbol}</Text>
+                          <Text className="block text-xs text-slate-500">{p.symbol}</Text>
                         </View>
                         <Text className="block text-xs text-slate-500">
-                          {sig.reason}
+                          {p.quantity}股 · 成本 {p.avgCost?.toFixed?.(2) ?? p.avgCost} · 市值 {formatMoney(p.marketValue)}
+                        </Text>
+                      </View>
+                      <View className="flex flex-col gap-0.5 items-end">
+                        <Text className="block text-sm font-semibold tabular-nums text-slate-100">
+                          {p.currentPrice?.toFixed?.(2) ?? p.currentPrice}
+                        </Text>
+                        <Text className={`block text-xs tabular-nums ${pnlColor(p.pnl)}`}>
+                          {fmtPnl(p.pnl)} ({fmtPct(p.pnlRate)})
                         </Text>
                       </View>
                     </View>
-                    <View className="flex flex-col items-end gap-1">
-                      <Text className="block text-sm font-medium text-slate-100 tabular-nums">
-                        ${sig.price.toLocaleString()}
-                      </Text>
-                      <Text className="block text-xs text-slate-500">{sig.time}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
+                  ))}
+                </View>
+              )}
+            </View>
           </CardContent>
         </Card>
 
-        {/* 资金概览 */}
+        {/* 信号与通知 */}
         <Card className="bg-slate-800 border-slate-700">
           <CardContent className="p-4">
-            <View className="flex flex-row items-center gap-2 mb-3">
-              <Shield size={14} color="#3b82f6" />
-              <Text className="block text-sm font-semibold text-slate-100">资金概览</Text>
-            </View>
-            <View className="flex flex-row gap-3">
-              <View className="flex flex-1 flex-col gap-1 bg-slate-900 rounded-lg p-3">
-                <Text className="block text-xs text-slate-500">可用余额</Text>
-                <Text className="block text-base font-bold text-slate-100 tabular-nums">
-                  {formatMoney(asset.availableBalance)}
-                </Text>
+            <View className="flex flex-col gap-3">
+              <View className="flex flex-row items-center gap-2">
+                <Bell size={14} color="#facc15" />
+                <Text className="block text-sm font-semibold text-slate-100">Agent 信号通知</Text>
+                {status?.config?.autoTrade && (
+                  <Badge className="bg-emerald-500 bg-opacity-20 text-emerald-400">
+                    <Text className="block text-[10px]">自动交易开启</Text>
+                  </Badge>
+                )}
               </View>
-              <View className="flex flex-1 flex-col gap-1 bg-slate-900 rounded-lg p-3">
-                <Text className="block text-xs text-slate-500">冻结保证金</Text>
-                <Text className="block text-base font-bold text-amber-500 tabular-nums">
-                  {formatMoney(asset.frozenBalance)}
-                </Text>
-              </View>
+              {notifications.length === 0 ? (
+                <View className="bg-slate-900 rounded-lg p-4">
+                  <Text className="block text-xs text-slate-500 text-center">
+                    暂无信号 · 监听引擎运行中，触发后将实时推送
+                  </Text>
+                </View>
+              ) : (
+                <View className="flex flex-col gap-2">
+                  {notifications.map((n) => (
+                    <View key={n.id} className="flex flex-row items-start justify-between bg-slate-900 rounded-lg px-3 py-2 gap-2">
+                      <View className="flex flex-col gap-0.5 flex-1">
+                        <Text className="block text-xs font-medium text-slate-100">{n.title}</Text>
+                        {n.content && <Text className="block text-xs text-slate-500">{n.content}</Text>}
+                      </View>
+                      {n.createdAt && <Text className="block text-[10px] text-slate-600">{fmtTime(n.createdAt)}</Text>}
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           </CardContent>
         </Card>
 
-        {/* 快捷操作 */}
-        <View className="flex flex-row gap-3">
+        {/* 快捷入口 */}
+        <View className="flex flex-row gap-2">
           <Button
-            className="flex-1 bg-emerald-500 text-white"
-            onClick={loadData}
+            variant="outline"
+            className="flex-1 bg-slate-800 border-slate-600 text-slate-300 rounded-xl"
+            onClick={() => Taro.navigateTo({ url: '/pages/backtest/index' })}
           >
-            <Text className="text-sm font-medium">刷新数据</Text>
+            <Text className="block text-xs">区间回测</Text>
           </Button>
           <Button
-            className="flex-1 bg-slate-700 text-slate-100"
-            variant="secondary"
+            variant="outline"
+            className="flex-1 bg-slate-800 border-slate-600 text-slate-300 rounded-xl"
+            onClick={() => Taro.navigateTo({ url: '/pages/paper-trading/index' })}
           >
-            <Text className="text-sm font-medium">风控设置</Text>
+            <Text className="block text-xs">交易明细</Text>
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 bg-slate-800 border-slate-600 text-slate-300 rounded-xl"
+            onClick={() => Taro.navigateTo({ url: '/pages/onboarding/index' })}
+          >
+            <Text className="block text-xs">重新配置</Text>
           </Button>
         </View>
       </View>

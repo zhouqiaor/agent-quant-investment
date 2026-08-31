@@ -14,9 +14,10 @@ import { PaperTradingModule } from '@/paper-trading/paper-trading.module';
 import { PersistenceModule } from '@/persistence/persistence.module';
 import { OptimizerModule } from '@/optimizer/optimizer.module';
 import { NotificationModule } from '@/notification/notification.module';
+import { BetaModule } from '@/beta/beta.module';
 
 @Module({
-  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule],
+  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule],
   controllers: [AppController],
   providers: [AppService],
 })

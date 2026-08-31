@@ -269,11 +269,13 @@ export class StrategyService {
   }
 
   private evaluateCondition(condition: Condition, market: { symbol: string; price: number; changePercent: number }, type: 'buy' | 'sell'): boolean {
-    // Simulate: ~10% chance of triggering per check cycle
-    const rand = Math.random();
-    if (rand > 0.1) return false;
-
-    // Basic logic: buy when price drops, sell when price rises
+    // 确定性求值（可测试性）：价格阈值条件直接比较；非价格条件按涨跌幅规则
+    if (condition.indicator === 'price') {
+      return type === 'buy'
+        ? market.price <= condition.value
+        : market.price >= condition.value;
+    }
+    // 兜底规则：跌 0.5% 触发买入，涨 0.5% 触发卖出（确定性，无随机）
     if (type === 'buy') {
       return market.changePercent < -0.5;
     }

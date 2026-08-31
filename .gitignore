@@ -48,3 +48,6 @@ pnpm-debug.log*
 .codegraph
 node-compile-cache/
 .codegraph/
+
+# SQLite 运行时数据（不入库）
+server/data/

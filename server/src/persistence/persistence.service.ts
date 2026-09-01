@@ -370,6 +370,23 @@ export class PersistenceService implements OnModuleInit {
   }
 
   // ==================== 内测配置（BetaConfig） ====================
+  /** 一键清空全部业务数据（从零重置用），保留表结构 */
+  clearAllData(): void {
+    const tables = [
+      'watch_stocks',
+      'custom_strategies',
+      'custom_stocks',
+      'trades',
+      'backtest_results',
+      'notifications',
+      'optimizations',
+      'beta_config',
+    ];
+    for (const t of tables) {
+      this.db.prepare(`DELETE FROM ${t}`).run();
+    }
+  }
+
   /** 测试辅助：执行原始 SQL（E2E 种子数据用） */
   execRaw(sql: string): void {
     this.db.exec(sql);

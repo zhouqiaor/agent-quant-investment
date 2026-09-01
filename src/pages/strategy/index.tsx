@@ -21,6 +21,8 @@ import {
   Plus,
   Radio,
   ChartBar,
+  Copy,
+  Trash2,
 } from 'lucide-react-taro'
 
 interface StrategyItem {
@@ -37,6 +39,8 @@ interface StrategyItem {
   symbol?: string
   monitorEnabled?: boolean
   autoTrade?: boolean
+  buyConditions?: Array<{ indicator: string; operator: string; value: number }>
+  sellConditions?: Array<{ indicator: string; operator: string; value: number }>
 }
 
 interface AgentSignal {
@@ -151,30 +155,47 @@ const StrategyPage = () => {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'running':
-        return (
-          <Badge className="bg-emerald-500 bg-opacity-20 text-emerald-400 border-emerald-500 border-opacity-30">
-            运行中
-          </Badge>
-        )
-      case 'stopped':
-        return (
-          <Badge className="bg-slate-700 text-slate-400 border-slate-600">
-            已停止
-          </Badge>
-        )
-      case 'backtesting':
-        return (
-          <Badge className="bg-blue-500 bg-opacity-20 text-blue-400 border-blue-500 border-opacity-30">
-            回测中
-          </Badge>
-        )
-      default:
-        return null
+  const copyStrategy = async (s: StrategyItem) => {
+    try {
+      const res = await Network.request({
+        url: '/api/strategies/custom',
+        method: 'POST',
+        data: {
+          name: `${s.name} 副本`,
+          symbol: s.symbol || '600519',
+          buyConditions: s.buyConditions || [{ indicator: 'price', operator: 'lte', value: 90 }],
+          sellConditions: s.sellConditions || [{ indicator: 'price', operator: 'gte', value: 110 }],
+          monitorEnabled: false,
+          autoTrade: false,
+        },
+      })
+      if (res.data?.data?.id) {
+        Taro.showToast({ title: '已复制为自定义策略', icon: 'success' })
+        loadStrategies()
+      }
+    } catch (e) {
+      Taro.showToast({ title: '复制失败', icon: 'none' })
     }
   }
+
+  const deleteStrategy = (id: string) => {
+    Taro.showModal({
+      title: '删除策略',
+      content: '确定删除该自定义策略吗？删除后不可恢复。',
+      confirmColor: '#ef4444',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await Network.request({ url: `/api/strategies/custom/${id}`, method: 'DELETE' })
+          Taro.showToast({ title: '已删除', icon: 'success' })
+          loadStrategies()
+        } catch (e) {
+          Taro.showToast({ title: '删除失败', icon: 'none' })
+        }
+      },
+    })
+  }
+
 
   return (
     <ScrollView scrollY className="h-full bg-slate-900 smooth-scroll hide-scrollbar tabbar-page">
@@ -296,7 +317,11 @@ const StrategyPage = () => {
                         <Text className="block text-sm font-semibold text-slate-100">
                           {s.name}
                         </Text>
-                        {getStatusBadge(s.status)}
+                        {!s.isCustom && (
+                          <Badge className="bg-slate-600 bg-opacity-40 text-slate-300 border-slate-500 border-opacity-40">
+                            模板
+                          </Badge>
+                        )}
                         {s.isCustom && (
                           <Badge className="bg-purple-500 bg-opacity-20 text-purple-400 border-purple-500 border-opacity-30">
                             自定义
@@ -346,39 +371,62 @@ const StrategyPage = () => {
                   </View>
 
                   <View className="flex flex-row gap-2 mt-3">
-                    <Button
-                      className={`flex-1 h-8 ${
-                        s.status === 'running'
-                          ? 'bg-red-500 bg-opacity-20 text-red-400'
-                          : 'bg-emerald-500 bg-opacity-20 text-emerald-400'
-                      }`}
-                      onClick={() => toggleStrategy(s.id, s.status)}
-                    >
-                      <Text className="text-xs font-medium">
-                        {s.status === 'running' ? '停止' : '启动'}
-                      </Text>
-                    </Button>
-                    <Button
-                      className="flex-1 h-8 bg-blue-500 bg-opacity-20 text-blue-400"
-                      variant="secondary"
-                    >
-                      <Activity size={12} color="#60a5fa" />
-                      <Text className="text-xs font-medium ml-1">回测</Text>
-                    </Button>
-                    <Button
-                      className="flex-1 h-8 bg-slate-700 text-slate-300"
-                      variant="secondary"
-                      onClick={() => {
-                        if (s.isCustom) {
-                          Taro.navigateTo({ url: `/pages/strategy/create?id=${s.id}` })
-                        }
-                      }}
-                    >
-                      <Target size={12} color="#cbd5e1" />
-                      <Text className="text-xs font-medium ml-1">
-                        {s.isCustom ? '编辑' : '参数'}
-                      </Text>
-                    </Button>
+                    {s.isCustom ? (
+                      <Button
+                        className={`flex-1 h-8 ${
+                          s.status === 'running'
+                            ? 'bg-red-500 bg-opacity-20 text-red-400'
+                            : 'bg-emerald-500 bg-opacity-20 text-emerald-400'
+                        }`}
+                        onClick={() => toggleStrategy(s.id, s.status)}
+                      >
+                        <Text className="text-xs font-medium">
+                          {s.status === 'running' ? '停止' : '启动'}
+                        </Text>
+                      </Button>
+                    ) : (
+                      <Button
+                        className="flex-1 h-8 bg-emerald-500 bg-opacity-20 text-emerald-400"
+                        onClick={() => copyStrategy(s)}
+                      >
+                        <Copy size={12} color="#34d399" />
+                        <Text className="text-xs font-medium ml-1">复制为自定义</Text>
+                      </Button>
+                    )}
+                    {s.isCustom && (
+                      <Button
+                        className="flex-1 h-8 bg-blue-500 bg-opacity-20 text-blue-400"
+                        variant="secondary"
+                        onClick={() => {
+                          Taro.navigateTo({
+                            url: `/pages/backtest/index?symbol=${s.symbol || '600519'}&strategyId=${s.id}`,
+                          })
+                        }}
+                      >
+                        <Activity size={12} color="#60a5fa" />
+                        <Text className="text-xs font-medium ml-1">回测</Text>
+                      </Button>
+                    )}
+                    {s.isCustom && (
+                      <Button
+                        className="flex-1 h-8 bg-slate-700 text-slate-300"
+                        variant="secondary"
+                        onClick={() => Taro.navigateTo({ url: `/pages/strategy/create?id=${s.id}` })}
+                      >
+                        <Target size={12} color="#cbd5e1" />
+                        <Text className="text-xs font-medium ml-1">编辑</Text>
+                      </Button>
+                    )}
+                    {s.isCustom && (
+                      <Button
+                        className="flex-1 h-8 bg-red-500 bg-opacity-20 text-red-400"
+                        variant="secondary"
+                        onClick={() => deleteStrategy(s.id)}
+                      >
+                        <Trash2 size={12} color="#f87171" />
+                        <Text className="text-xs font-medium ml-1">删除</Text>
+                      </Button>
+                    )}
                   </View>
                 </CardContent>
               </Card>

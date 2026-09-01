@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Inject, Optional } from '@nestjs/commo
 import { PersistenceService } from '../persistence/persistence.service';
 import { WatchlistService } from '../stock/watchlist.service';
 import { StrategyService } from '../strategy/strategy.service';
+import { PaperTradingService } from '../paper-trading/paper-trading.service';
 
 export const BETA_CONFIG_KEY = 'default';
 
@@ -38,6 +39,9 @@ export class BetaConfigService {
     @Optional()
     @Inject(StrategyService)
     private readonly strategyChecker?: StrategyChecker,
+    @Optional()
+    @Inject(PaperTradingService)
+    private readonly paperTrading?: PaperTradingService,
   ) {}
 
   getDefaultConfig(): BetaConfig {
@@ -48,6 +52,15 @@ export class BetaConfigService {
       autoTrade: true,
       status: 'draft',
     };
+  }
+
+  /**
+   * 一键从零重置：清空关注/自定义股票/自定义策略/账户/通知/回测/优化/配置，
+   * 账户金额归零且停止运行，回到完全未配置状态。
+   */
+  resetAll(): void {
+    this.persistence.clearAllData();
+    this.paperTrading?.resetAccount('default', 0);
   }
 
   getConfig(): BetaConfig | null {

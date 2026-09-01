@@ -117,7 +117,7 @@ export class PaperTradingService {
 
   resetAccount(accountId?: string, initialCapital?: number): PaperAccount {
     const id = accountId || this.defaultAccountId;
-    const capital = initialCapital || 100000;
+    const capital = initialCapital ?? 100000;
 
     this.accounts.set(id, {
       id,

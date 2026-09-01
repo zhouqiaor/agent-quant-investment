@@ -41,6 +41,13 @@ export class BetaController {
     return { code: 200, msg: '内测投资已开启', data: { config, account } };
   }
 
+  @Post('reset-all')
+  @HttpCode(200)
+  resetAll() {
+    this.betaConfig.resetAll();
+    return { code: 200, msg: '已重置为从零配置状态', data: null };
+  }
+
   @Post('tick')
   @HttpCode(200)
   tick(@Body() body?: { marketData?: Array<{ symbol: string; price: number; changePercent: number }> }) {

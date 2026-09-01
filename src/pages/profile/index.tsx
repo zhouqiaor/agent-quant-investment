@@ -1,12 +1,14 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
+import Taro from '@tarojs/taro'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import {
   Wallet,
   TrendingUp,
@@ -17,6 +19,7 @@ import {
   Shield,
   Bell,
   TriangleAlert,
+  RotateCcw,
 } from 'lucide-react-taro'
 
 interface PositionDetail {
@@ -116,6 +119,17 @@ const ProfilePage = () => {
       console.log('save risk:', res.data)
     } catch (e) {
       console.error('saveRiskSettings error:', e)
+    }
+  }
+
+  const [resetOpen, setResetOpen] = useState(false)
+  const handleResetAll = async () => {
+    try {
+      await Network.request({ url: '/api/beta/reset-all', method: 'POST' })
+      Taro.showToast({ title: '已重置为从零配置', icon: 'success' })
+      Taro.switchTab({ url: '/pages/index/index' })
+    } catch (e) {
+      Taro.showToast({ title: '重置失败', icon: 'none' })
     }
   }
 
@@ -434,6 +448,45 @@ const ProfilePage = () => {
           </ScrollView>
         </TabsContent>
       </Tabs>
+
+      <Card className="bg-slate-800 border-slate-700 rounded-xl mt-1 mb-6">
+        <CardContent className="p-4">
+          <View className="flex flex-row items-center gap-3">
+            <View className="w-9 h-9 rounded-lg bg-red-500 bg-opacity-20 flex items-center justify-center">
+              <RotateCcw size={18} color="#f87171" />
+            </View>
+            <View className="flex-1">
+              <Text className="block text-sm font-medium text-slate-100">重置内测数据</Text>
+              <Text className="block text-xs text-slate-400 mt-1">
+                清空关注、策略、账户与通知，回到从零配置状态
+              </Text>
+            </View>
+          </View>
+          <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+            <AlertDialogTrigger>
+              <Button className="w-full mt-3 bg-red-500 text-white" variant="destructive">
+                <Text className="text-sm font-medium">从零重置</Text>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>确认重置全部内测数据？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  将清空投入金额、关注股票、自定义策略、模拟账户与全部通知，回到首次使用的从零配置状态。此操作不可恢复。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>
+                  <Text className="text-sm">取消</Text>
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={handleResetAll}>
+                  <Text className="text-sm text-red-400">确认重置</Text>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
     </View>
   )
 }

@@ -183,10 +183,48 @@ export class PaperTradingService {
 
   private executeBuy(
     account: PaperAccount,
-    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
+    signal: { type: 'BUY' | 'SELL'; symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
+    allowExisting = false,
   ): { success: boolean; message: string; trade?: PaperTrade } {
     // 检查是否已持仓
     const existingPosition = account.positions.find(p => p.symbol === signal.symbol);
+
+    // 手动加仓：允许已持仓，按加权平均成本合并
+    if (existingPosition && allowExisting) {
+      const qty = signal.quantity && signal.quantity > 0 ? signal.quantity : 0;
+      if (qty <= 0) {
+        return { success: false, message: '加仓数量必须大于0' };
+      }
+      const amount = qty * signal.price;
+      if (amount > account.cash) {
+        return { success: false, message: '可用资金不足' };
+      }
+      account.cash -= amount;
+      const totalQty = existingPosition.quantity + qty;
+      existingPosition.avgCost =
+        Math.round(((existingPosition.avgCost * existingPosition.quantity + amount) / totalQty) * 100) / 100;
+      existingPosition.quantity = totalQty;
+      existingPosition.currentPrice = signal.price;
+      existingPosition.marketValue = totalQty * signal.price;
+
+      const addTrade: PaperTrade = {
+        id: `pt_${Date.now()}_${account.trades.length + 1}`,
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().split(' ')[0],
+        type: 'BUY',
+        symbol: signal.symbol,
+        name: signal.name,
+        price: signal.price,
+        quantity: qty,
+        amount,
+        reason: signal.reason,
+        strategyId: signal.strategyId,
+      };
+      account.trades.push(addTrade);
+      this.updateAccountTotal(account);
+      return { success: true, message: `加仓 ${signal.name} ${qty}股`, trade: addTrade };
+    }
+
     if (existingPosition) {
       return { success: false, message: `已持仓 ${signal.name}，跳过买入` };
     }
@@ -220,7 +258,7 @@ export class PaperTradingService {
 
     // 记录交易
     const trade: PaperTrade = {
-      id: `pt_${Date.now()}`,
+      id: `pt_${Date.now()}_${account.trades.length + 1}`,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0],
       type: 'BUY',
@@ -241,7 +279,7 @@ export class PaperTradingService {
 
   private executeSell(
     account: PaperAccount,
-    signal: { symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
+    signal: { type: 'BUY' | 'SELL'; symbol: string; name: string; price: number; reason: string; strategyId: string; quantity?: number },
   ): { success: boolean; message: string; trade?: PaperTrade } {
     // 查找持仓
     const positionIndex = account.positions.findIndex(p => p.symbol === signal.symbol);
@@ -250,22 +288,32 @@ export class PaperTradingService {
     }
 
     const position = account.positions[positionIndex];
-    const amount = position.quantity * signal.price;
-    const pnl = (signal.price - position.avgCost) * position.quantity;
+    // 支持部分卖出：指定数量则卖出对应数量（不超过持仓），未指定则清仓
+    const qty =
+      signal.quantity && signal.quantity > 0
+        ? Math.min(signal.quantity, position.quantity)
+        : position.quantity;
+    const amount = qty * signal.price;
+    const pnl = (signal.price - position.avgCost) * qty;
 
     account.cash += amount;
-    account.positions.splice(positionIndex, 1);
+    if (qty >= position.quantity) {
+      account.positions.splice(positionIndex, 1);
+    } else {
+      position.quantity -= qty;
+      position.marketValue = position.quantity * signal.price;
+    }
 
     // 记录交易
     const trade: PaperTrade = {
-      id: `pt_${Date.now()}`,
+      id: `pt_${Date.now()}_${account.trades.length + 1}`,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0],
       type: 'SELL',
       symbol: signal.symbol,
       name: signal.name,
       price: signal.price,
-      quantity: position.quantity,
+      quantity: qty,
       amount,
       reason: signal.reason + ` (盈亏: ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)})`,
       strategyId: signal.strategyId,
@@ -276,7 +324,7 @@ export class PaperTradingService {
 
     return {
       success: true,
-      message: `卖出 ${signal.name} ${position.quantity}股，${pnl > 0 ? '盈利' : '亏损'} ${Math.abs(pnl).toFixed(2)}`,
+      message: `卖出 ${signal.name} ${qty}股，${pnl > 0 ? '盈利' : '亏损'} ${Math.abs(pnl).toFixed(2)}`,
       trade,
     };
   }
@@ -310,10 +358,135 @@ export class PaperTradingService {
     return this.getAccount(accountId).positions;
   }
 
-  // 获取交易记录
-  getTrades(accountId?: string, limit = 20): PaperTrade[] {
+  // 获取单笔交易记录
+  getTrade(id: string, accountId?: string): PaperTrade | null {
+    return this.getAccount(accountId).trades.find((t) => t.id === id) ?? null;
+  }
+
+  // 获取交易汇总统计
+  getTradeSummary(accountId?: string): {
+    totalTrades: number;
+    buyCount: number;
+    sellCount: number;
+    totalBuyAmount: number;
+    totalSellAmount: number;
+    realizedPnl: number;
+  } {
     const trades = this.getAccount(accountId).trades;
-    return trades.slice(-limit).reverse();
+    let buyCount = 0;
+    let sellCount = 0;
+    let totalBuyAmount = 0;
+    let totalSellAmount = 0;
+    let realizedPnl = 0;
+    let buyCost = 0; // 加权平均买入成本（简化：用累计买入总成本/累计买入量计算已实现盈亏）
+    let buyQty = 0;
+    for (const t of trades) {
+      if (t.type === 'BUY') {
+        buyCount++;
+        totalBuyAmount += t.amount;
+        buyCost += t.amount;
+        buyQty += t.quantity;
+      } else {
+        sellCount++;
+        totalSellAmount += t.amount;
+        const avgCost = buyQty > 0 ? buyCost / buyQty : 0;
+        realizedPnl += (t.price - avgCost) * t.quantity;
+        buyQty -= t.quantity;
+        buyCost -= avgCost * t.quantity;
+      }
+    }
+    return {
+      totalTrades: trades.length,
+      buyCount,
+      sellCount,
+      totalBuyAmount: Math.round(totalBuyAmount * 100) / 100,
+      totalSellAmount: Math.round(totalSellAmount * 100) / 100,
+      realizedPnl: Math.round(realizedPnl * 100) / 100,
+    };
+  }
+
+  // 获取交易记录（支持按股票/类型筛选，时间倒序，分页）
+  getTrades(query?: {
+    accountId?: string;
+    symbol?: string;
+    type?: 'BUY' | 'SELL';
+    strategyId?: string;
+    limit?: number;
+    offset?: number;
+  }): { list: PaperTrade[]; total: number } {
+    const { accountId, symbol, type: typeFilter, strategyId, limit = 50, offset = 0 } = query ?? {};
+    const all = this.getAccount(accountId).trades.slice().reverse();
+    const filtered = all.filter((t) => {
+      if (symbol && t.symbol !== symbol) return false;
+      if (typeFilter && t.type !== typeFilter) return false;
+      if (strategyId && t.strategyId !== strategyId) return false;
+      return true;
+    });
+    const list = filtered.slice(offset, offset + limit);
+    return { list, total: filtered.length };
+  }
+
+  // 获取单只持仓详情
+  getPosition(symbol: string, accountId?: string): PaperPosition | null {
+    return this.getAccount(accountId).positions.find((p) => p.symbol === symbol) ?? null;
+  }
+
+  // 手动买入
+  manualBuy(
+    symbol: string,
+    name: string,
+    price: number,
+    quantity: number,
+    reason = '手动买入',
+    accountId?: string,
+  ): { success: boolean; message: string; trade?: PaperTrade } {
+    if (quantity <= 0 || !Number.isFinite(quantity)) {
+      return { success: false, message: '数量必须大于0' };
+    }
+    if (price <= 0 || !Number.isFinite(price)) {
+      return { success: false, message: '价格必须大于0' };
+    }
+    const account = this.getAccount(accountId);
+    return this.executeBuy(account, {
+      type: 'BUY',
+      symbol,
+      name,
+      price,
+      reason,
+      strategyId: 'manual',
+      quantity,
+    }, true);
+  }
+
+  // 手动卖出（可指定数量，默认全仓）
+  manualSell(
+    symbol: string,
+    price: number,
+    quantity?: number,
+    reason = '手动卖出',
+    accountId?: string,
+  ): { success: boolean; message: string; trade?: PaperTrade } {
+    if (price <= 0 || !Number.isFinite(price)) {
+      return { success: false, message: '价格必须大于0' };
+    }
+    const account = this.getAccount(accountId);
+    const pos = account.positions.find((p) => p.symbol === symbol);
+    if (!pos) {
+      return { success: false, message: '无该持仓' };
+    }
+    const qty = quantity && quantity > 0 ? Math.min(quantity, pos.quantity) : pos.quantity;
+    if (qty <= 0) {
+      return { success: false, message: '卖出数量无效' };
+    }
+    return this.executeSell(account, {
+      type: 'SELL',
+      symbol,
+      name: pos.name,
+      price,
+      reason,
+      strategyId: 'manual',
+      quantity: qty,
+    });
   }
 
   // 模拟自动交易（根据策略信号执行）

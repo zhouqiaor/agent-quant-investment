@@ -74,13 +74,98 @@ export class PaperTradingController {
     };
   }
 
+  @Get('summary')
+  getSummary(@Query('accountId') accountId?: string) {
+    const summary = this.paperTradingService.getTradeSummary(accountId);
+    return { code: 200, msg: 'success', data: summary };
+  }
+
+  @Get('trade/:id')
+  getTrade(@Param('id') id: string, @Query('accountId') accountId?: string) {
+    const trade = this.paperTradingService.getTrade(id, accountId);
+    if (!trade) {
+      return { code: 404, msg: '交易记录不存在', data: null };
+    }
+    return { code: 200, msg: 'success', data: trade };
+  }
+
   @Get('trades')
-  getTrades(@Query('accountId') accountId?: string, @Query('limit') limit?: string) {
-    const trades = this.paperTradingService.getTrades(accountId, limit ? parseInt(limit) : 20);
+  getTrades(
+    @Query('accountId') accountId?: string,
+    @Query('symbol') symbol?: string,
+    @Query('type') type?: 'BUY' | 'SELL',
+    @Query('strategyId') strategyId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const result = this.paperTradingService.getTrades({
+      accountId,
+      symbol,
+      type,
+      strategyId,
+      limit: limit ? parseInt(limit) : 50,
+      offset: offset ? parseInt(offset) : 0,
+    });
+    return { code: 200, msg: 'success', data: { list: result.list, total: result.total } };
+  }
+
+  @Get('position/:symbol')
+  getPosition(@Param('symbol') symbol: string, @Query('accountId') accountId?: string) {
+    const pos = this.paperTradingService.getPosition(symbol, accountId);
+    return { code: 200, msg: 'success', data: pos };
+  }
+
+  @Post('manual/buy')
+  @HttpCode(200)
+  manualBuy(
+    @Body()
+    body: {
+      symbol: string;
+      name?: string;
+      price: number;
+      quantity: number;
+      reason?: string;
+      accountId?: string;
+    },
+  ) {
+    const result = this.paperTradingService.manualBuy(
+      body.symbol,
+      body.name || body.symbol,
+      body.price,
+      body.quantity,
+      body.reason,
+      body.accountId,
+    );
     return {
-      code: 200,
-      msg: 'success',
-      data: trades,
+      code: result.success ? 200 : 400,
+      msg: result.message,
+      data: result.trade ?? null,
+    };
+  }
+
+  @Post('manual/sell')
+  @HttpCode(200)
+  manualSell(
+    @Body()
+    body: {
+      symbol: string;
+      price: number;
+      quantity?: number;
+      reason?: string;
+      accountId?: string;
+    },
+  ) {
+    const result = this.paperTradingService.manualSell(
+      body.symbol,
+      body.price,
+      body.quantity,
+      body.reason,
+      body.accountId,
+    );
+    return {
+      code: result.success ? 200 : 400,
+      msg: result.message,
+      data: result.trade ?? null,
     };
   }
 

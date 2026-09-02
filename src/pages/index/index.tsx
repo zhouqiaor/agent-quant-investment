@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Wallet,
   Activity,
+  Shield,
   ArrowUpRight,
   ArrowDownRight,
   Zap,
@@ -82,6 +83,24 @@ const IndexPage = () => {
 
   const fmtPct = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
   const fmtPnl = (val: number) => `${val >= 0 ? '+' : ''}${formatMoney(val)}`
+
+  const [showTour, setShowTour] = useState(false)
+  const [tourStep, setTourStep] = useState(0)
+
+  // 首次配置完成后展示功能 Tour
+  useEffect(() => {
+    if (status?.configured && !loading) {
+      const hasSeen = Taro.getStorageSync('tour_seen_v2')
+      if (!hasSeen) {
+        setShowTour(true)
+      }
+    }
+  }, [status?.configured, loading])
+
+  const closeTour = () => {
+    setShowTour(false)
+    Taro.setStorageSync('tour_seen_v2', '1')
+  }
 
   /** 拉取关注列表启用标的的真实行情，驱动后端实时重估+信号引擎 */
   const tickOnce = useCallback(async () => {
@@ -205,16 +224,26 @@ const IndexPage = () => {
       <View className="px-4 pb-8 pt-4 flex flex-col gap-4">
         {/* 头部：标题 + 实时状态 */}
         <View className="flex flex-row items-center justify-between">
-          <View className="flex flex-col gap-0.5">
+          <View className="flex flex-col gap-1">
             <Text className="block text-lg font-bold text-slate-100">实时看盘</Text>
             <Text className="block text-xs text-slate-500">
               {account?.isRunning ? `模拟投资运行中 · ${watchlist.filter((w) => w.enabled).length} 只启用` : '已停止'}
             </Text>
           </View>
-          <View className="flex flex-row items-center gap-1.5">
+          <View className="flex flex-row items-center gap-2">
             {refreshing && <RefreshCw size={12} color="#10b981" />}
             <Text className="block text-xs text-slate-500">
               {lastTickAt ? `更新 ${fmtTime(lastTickAt)}` : '连接中...'}
+            </Text>
+          </View>
+        </View>
+
+        {/* 模拟盘标识胶囊 */}
+        <View className="flex flex-row items-center justify-center mb-3">
+          <View className="flex flex-row items-center gap-2 px-3 py-1 rounded-full bg-amber-500 bg-opacity-10 border border-amber-500 border-opacity-30">
+            <Shield size={12} color="#fbbf24" />
+            <Text className="block text-xs font-medium text-amber-400">
+              模拟交易中 · 不涉及真实资金
             </Text>
           </View>
         </View>
@@ -280,7 +309,7 @@ const IndexPage = () => {
                 <View className="flex flex-col gap-2">
                   {account.positions.map((p) => (
                     <View key={p.symbol} className="flex flex-row items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
-                      <View className="flex flex-col gap-0.5">
+                      <View className="flex flex-col gap-1">
                         <View className="flex flex-row items-center gap-2">
                           <Text className="block text-sm text-slate-100">{p.name || p.symbol}</Text>
                           <Text className="block text-xs text-slate-500">{p.symbol}</Text>
@@ -289,7 +318,7 @@ const IndexPage = () => {
                           {p.quantity}股 · 成本 {p.avgCost?.toFixed?.(2) ?? p.avgCost} · 市值 {formatMoney(p.marketValue)}
                         </Text>
                       </View>
-                      <View className="flex flex-col gap-0.5 items-end">
+                      <View className="flex flex-col gap-1 items-end">
                         <Text className="block text-sm font-semibold tabular-nums text-slate-100">
                           {p.currentPrice?.toFixed?.(2) ?? p.currentPrice}
                         </Text>
@@ -304,6 +333,85 @@ const IndexPage = () => {
             </View>
           </CardContent>
         </Card>
+
+        {/* 首次功能引导 Tour */}
+        {showTour && status?.configured && (
+          <View className="fixed inset-0 z-50 pointer-events-none">
+            <View className="absolute inset-0 bg-black bg-opacity-70" />
+            <View className="absolute top-24 left-4 right-4 pointer-events-auto">
+              <Card className="bg-slate-800 border-emerald-500 border-opacity-60 shadow-xl">
+                <CardContent className="p-4">
+                  <View className="flex flex-row items-center gap-2 mb-2">
+                    <Badge className="bg-emerald-500 bg-opacity-20 text-emerald-400 border-emerald-500 border-opacity-40">
+                      第 {tourStep + 1} 步 / 共 3 步
+                    </Badge>
+                    <Text
+                      className="block text-xs text-slate-400 ml-auto"
+                      onClick={closeTour}
+                    >
+                      跳过
+                    </Text>
+                  </View>
+                  {tourStep === 0 && (
+                    <>
+                      <Text className="block text-base font-bold text-emerald-400 mb-1">
+                        实时资产总览
+                      </Text>
+                      <Text className="block text-sm text-slate-300 leading-relaxed">
+                        顶部卡片展示总资产、今日盈亏和收益率，每 6 秒自动刷新。
+                      </Text>
+                    </>
+                  )}
+                  {tourStep === 1 && (
+                    <>
+                      <Text className="block text-base font-bold text-emerald-400 mb-1">
+                        持仓明细
+                      </Text>
+                      <Text className="block text-sm text-slate-300 leading-relaxed">
+                        点进单只股票查看成本、浮盈浮亏，支持手动加仓、减仓、清仓。
+                      </Text>
+                    </>
+                  )}
+                  {tourStep === 2 && (
+                    <>
+                      <Text className="block text-base font-bold text-emerald-400 mb-1">
+                        底部四大模块
+                      </Text>
+                      <Text className="block text-sm text-slate-300 leading-relaxed">
+                        首页看盘、行情选股、策略配置、我的设置，按需切换。
+                      </Text>
+                    </>
+                  )}
+                  <View className="flex flex-row gap-2 mt-4">
+                    {tourStep > 0 && (
+                      <Button
+                        className="flex-1 h-8 bg-slate-700 text-slate-200"
+                        variant="secondary"
+                        onClick={() => setTourStep(tourStep - 1)}
+                      >
+                        <Text className="text-sm">上一步</Text>
+                      </Button>
+                    )}
+                    <Button
+                      className="flex-1 h-8 bg-emerald-500 text-white"
+                      onClick={() => {
+                        if (tourStep < 2) {
+                          setTourStep(tourStep + 1)
+                        } else {
+                          closeTour()
+                        }
+                      }}
+                    >
+                      <Text className="text-sm font-medium">
+                        {tourStep < 2 ? '下一步' : '开始体验'}
+                      </Text>
+                    </Button>
+                  </View>
+                </CardContent>
+              </Card>
+            </View>
+          </View>
+        )}
 
         {/* 信号与通知 */}
         <Card className="bg-slate-800 border-slate-700">
@@ -328,7 +436,7 @@ const IndexPage = () => {
                 <View className="flex flex-col gap-2">
                   {notifications.map((n) => (
                     <View key={n.id} className="flex flex-row items-start justify-between bg-slate-900 rounded-lg px-3 py-2 gap-2">
-                      <View className="flex flex-col gap-0.5 flex-1">
+                      <View className="flex flex-col gap-1 flex-1">
                         <Text className="block text-xs font-medium text-slate-100">{n.title}</Text>
                         {n.content && <Text className="block text-xs text-slate-500">{n.content}</Text>}
                       </View>

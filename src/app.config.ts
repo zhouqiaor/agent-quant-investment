@@ -8,6 +8,8 @@ export default typeof defineAppConfig === 'function'
       'pages/backtest/index',
       'pages/paper-trading/index',
       'pages/onboarding/index',
+      'pages/trades/index',
+      'pages/position/index',
       'pages/profile/index'
     ],
     window: {
@@ -59,6 +61,8 @@ export default typeof defineAppConfig === 'function'
       'pages/backtest/index',
       'pages/paper-trading/index',
       'pages/onboarding/index',
+      'pages/trades/index',
+      'pages/position/index',
       'pages/profile/index'
     ],
     window: {

@@ -14,6 +14,10 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '@/app.module';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('E2E 全流程集成测试', () => {
   let app: INestApplication;
 
@@ -35,6 +39,11 @@ describe('E2E 全流程集成测试', () => {
 
   afterAll(async () => {
     await app.close();
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
   });
 
   it('步骤1: 健康检查 — 服务可用', async () => {

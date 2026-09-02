@@ -10,6 +10,21 @@ describe('StockService - 自定义股票', () => {
   let service: StockService;
   let persistence: PersistenceService;
   let dbPath: string;
+  const originalFetch = globalThis.fetch;
+
+  beforeAll(() => {
+    // 隔离网络：目录同步/行情兜底一律 mock 为空
+    (globalThis as { fetch: unknown }).fetch = async () => ({
+      ok: true,
+      json: async () => [],
+      text: async () => '',
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+  });
+
+  afterAll(() => {
+    (globalThis as { fetch: unknown }).fetch = originalFetch;
+  });
 
   beforeEach(async () => {
     dbPath = `/tmp/test-custom-stock-${Date.now()}-${Math.floor(Math.random() * 1e6)}.db`;
@@ -77,10 +92,11 @@ describe('StockService - 自定义股票', () => {
 
   it('T9 搜索合并：自定义股票出现在搜索结果中', async () => {
     await service.addCustomStock('688981', '中芯自定义');
-    const results = service.searchStocks('688981');
-    expect(results.length).toBe(1);
-    expect(results[0].name).toBe('中芯自定义');
-    expect(results[0].isCustom).toBe(true);
+    const results = await service.searchStocks('688981');
+    const customHits = results.filter((s) => s.isCustom);
+    expect(customHits.length).toBeGreaterThanOrEqual(1);
+    expect(customHits[0].name).toBe('中芯自定义');
+    expect(customHits[0].isCustom).toBe(true);
   });
 
   it('T10 持久化：重新实例化后数据仍在', async () => {

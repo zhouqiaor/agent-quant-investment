@@ -27,9 +27,17 @@ export class StockController {
   }
 
   @Get('search')
-  searchStocks(@Query('q') query: string) {
-    const stocks = this.stockService.searchStocks(query || '');
+  async searchStocks(@Query('q') query: string) {
+    const stocks = await this.stockService.searchStocks(query || '');
     return { code: 200, msg: 'success', data: stocks };
+  }
+
+  /** 手动触发全量股票目录同步（沪深A+北交所），默认24h内跳过，force=true 强制 */
+  @Post('sync')
+  @HttpCode(200)
+  async syncDirectory(@Body() body?: { force?: boolean }) {
+    const result = await this.stockService.syncAllStocks(body?.force === true);
+    return { code: 200, msg: 'success', data: result };
   }
 
   @Get('quote')

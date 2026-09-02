@@ -11,6 +11,10 @@ import { MarketService } from '../market/market.service';
  * - 日期: YYYY-MM-DD 格式, start < end, 跨度 ≤3650 天
  * - 收益正确性: 金额等比缩放(totalReturn 不变, finalCapital 等比), 曲线起点=初始资金
  */
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('BacktestService - 自定义金额/时间段', () => {
   let service: BacktestService;
 
@@ -86,3 +90,11 @@ describe('BacktestService - 自定义金额/时间段', () => {
     expect(typeof r1.maxDrawdown).toBe('number');
   });
 });
+
+  afterAll(async () => {
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
+  });

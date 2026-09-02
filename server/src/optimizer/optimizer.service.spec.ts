@@ -14,6 +14,10 @@ import { StrategyService } from '../strategy/strategy.service';
 import { MarketService } from '../market/market.service';
 import { PersistenceService } from '../persistence/persistence.service';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('OptimizerService - 参数优化（网格搜索）', () => {
   let optimizer: OptimizerService;
 
@@ -186,3 +190,11 @@ describe('OptimizerService - 参数优化（网格搜索）', () => {
     });
   });
 });
+
+  afterAll(async () => {
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
+  });

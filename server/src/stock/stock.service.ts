@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PersistenceService } from '@/persistence/persistence.service';
 import * as iconv from 'iconv-lite';
 
@@ -60,12 +60,109 @@ export const STOCK_NAMES: Record<string, string> = {
 };
 
 @Injectable()
-export class StockService {
+export class StockService implements OnApplicationBootstrap {
   constructor(private readonly persistence: PersistenceService) {}
   private readonly logger = new Logger(StockService.name);
   private realtimeCache: Map<string, StockInfo> = new Map();
   private lastFetchTime = 0;
   private readonly CACHE_TTL = 5000; // 5 seconds cache
+
+  private readonly DIRECTORY_TTL = 24 * 60 * 60 * 1000; // 目录懒刷新周期
+  private syncInFlight: Promise<{ count: number; skipped: boolean; durationMs: number }> | null =
+    null;
+
+  /** 启动预热：后台异步同步全量股票目录（不阻塞启动；测试环境跳过） */
+  onApplicationBootstrap(): void {
+    if (process.env.NODE_ENV === 'test') return;
+    this.syncAllStocks().catch((e) => this.logger.warn(`目录预热失败: ${e.message}`));
+  }
+
+  /**
+   * 同步全量股票目录（沪深A + 北交所，约5400只）
+   * 数据源：新浪财经 Market_Center.getHQNodeData（免费、无Key、JSON）
+   * - 默认懒刷新：24h 内已同步则跳过
+   * - force=true 强制重新同步
+   * - 并发去重：进行中的同步自动复用同一 Promise
+   */
+  async syncAllStocks(
+    force = false,
+  ): Promise<{ count: number; skipped: boolean; durationMs: number }> {
+    if (!force) {
+      const last = this.persistence.getDirectoryLastSyncAt();
+      if (last && Date.now() - last < this.DIRECTORY_TTL) {
+        return { count: this.persistence.directoryCount(), skipped: true, durationMs: 0 };
+      }
+    }
+    if (this.syncInFlight) return this.syncInFlight;
+    this.syncInFlight = this.doSync();
+    try {
+      return await this.syncInFlight;
+    } finally {
+      this.syncInFlight = null;
+    }
+  }
+
+  private async doSync(): Promise<{ count: number; skipped: boolean; durationMs: number }> {
+    const start = Date.now();
+    let page = 1;
+    let total = 0;
+    while (page <= 80) {
+      const url = `https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=${page}&num=100&sort=symbol&asc=1&node=hs_a`;
+      let rows: any[];
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Referer: 'https://finance.sina.com.cn',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        });
+        if (!response.ok) break;
+        rows = (await response.json()) as any[];
+      } catch (e) {
+        this.logger.error(`目录同步第 ${page} 页失败: ${e.message}`);
+        break;
+      }
+      if (!Array.isArray(rows) || rows.length === 0) break;
+
+      const batch = rows
+        .map((r) => ({
+          symbol: String(r.code || '').trim(),
+          name: String(r.name || '').trim(),
+          market: String(r.symbol || '').replace(/\d{6}$/, '').trim() || 'sh',
+          price: Number(r.trade) || 0,
+          changePercent: Number(r.changepercent) || 0,
+          pe: r.per != null ? Number(r.per) : null,
+          pb: r.pb != null ? Number(r.pb) : null,
+          mktcap: r.mktcap != null ? Number(r.mktcap) : null,
+        }))
+        .filter((r) => /^\d{6}$/.test(r.symbol) && !!r.name);
+      this.persistence.upsertDirectoryBatch(batch);
+      total += batch.length;
+      page++;
+      await this.sleep(120); // 限速，避免触发风控
+    }
+    if (page > 1) {
+      this.persistence.setDirectoryLastSyncAt(Date.now());
+    }
+    this.logger.log(`全量股票目录同步: ${total} 只, 耗时 ${Date.now() - start}ms`);
+    return { count: total, skipped: false, durationMs: Date.now() - start };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /** 搜索前确保目录可用（为空或过期时同步；2.5s 超时保护，超时后后台继续、本次走静态兜底） */
+  private async ensureDirectoryReady(): Promise<void> {
+    const count = this.persistence.directoryCount();
+    const last = this.persistence.getDirectoryLastSyncAt();
+    if (count > 0 && last && Date.now() - last < this.DIRECTORY_TTL) return;
+    try {
+      await Promise.race([this.syncAllStocks(), this.sleep(2500)]);
+    } catch {
+      /* 静默失败 */
+    }
+  }
 
   /**
    * Fetch real-time quote from Sina Finance API
@@ -222,6 +319,14 @@ export class StockService {
    * Convert symbol to Sina stock code
    */
   private getStockCode(symbol: string): string {
+    // 防御：已带市场前缀的直接标准化返回
+    if (/^(sh|sz|bj)/.test(symbol)) {
+      return symbol;
+    }
+    // 北交所：43/83/87/88/920 开头
+    if (/^(43|83|87|88|920)/.test(symbol)) {
+      return `bj${symbol}`;
+    }
     if (symbol.startsWith('6') || symbol.startsWith('9')) {
       return `sh${symbol}`;
     }
@@ -242,9 +347,15 @@ export class StockService {
     const code = (symbol || '').trim().toUpperCase();
     if (!code) throw new BadRequestException('股票代码不能为空');
     if (!this.isValidSymbol(code)) {
-      throw new BadRequestException(`无效的股票代码: ${code}（仅支持A股6位代码，6/0/3开头）`);
+      throw new BadRequestException(
+        `无效的股票代码: ${code}（支持沪深A股6位代码 6/0/3 开头，及北交所 43/83/87/88/920 开头）`,
+      );
     }
-    let stockName = (name || '').trim() || STOCK_NAMES[code] || '';
+    let stockName =
+      (name || '').trim() ||
+      STOCK_NAMES[code] ||
+      this.persistence.getDirectoryMeta(code)?.name ||
+      '';
     if (!stockName) {
       try {
         const quote = await this.fetchRealtimeQuote(code);
@@ -272,8 +383,11 @@ export class StockService {
   }
 
   private isValidSymbol(code: string): boolean {
-    // A股: 6位数字且以 6(沪)/0(深)/3(创业板) 开头
+    // A股(沪深): 6位数字且以 6(沪)/0(深)/3(创业板) 开头
     if (/^[036][0-9]{5}$/.test(code)) return true;
+    // 北交所: 43/83/87/88 开头（6位）与 920 开头
+    if (/^(43|83|87|88)[0-9]{4}$/.test(code)) return true;
+    if (/^920[0-9]{3}$/.test(code)) return true;
     return false;
   }
 
@@ -283,7 +397,11 @@ export class StockService {
     return 'US';
   }
 
-  searchStocks(query: string): StockInfo[] {
+  /**
+   * 搜索股票：自定义 → 静态热门 → 全量目录（沪深A+北交所约5400只）
+   * 目录为空或过期时自动同步（失败静默走静态兜底）
+   */
+  async searchStocks(query: string): Promise<StockInfo[]> {
     if (!query || query.trim() === '') {
       return Object.keys(STOCK_NAMES).slice(0, 10).map(symbol => ({
         symbol,
@@ -325,8 +443,8 @@ export class StockService {
         isCustom: true as const,
       }));
     const customSymbols = new Set(customStocks.map(s => s.symbol));
-    const results = Object.entries(STOCK_NAMES)
-      .filter(([symbol, name]) => 
+    const staticResults = Object.entries(STOCK_NAMES)
+      .filter(([symbol, name]) =>
         symbol.includes(q) || name.toLowerCase().includes(q)
       )
       .map(([symbol, name]) => ({
@@ -345,8 +463,32 @@ export class StockService {
         high52w: STOCK_METADATA[symbol]?.high52w || 0,
         low52w: STOCK_METADATA[symbol]?.low52w || 0,
       }));
+    const staticSymbols = new Set(staticResults.map(s => s.symbol));
 
-    return [...customStocks, ...results.filter(r => !customSymbols.has(r.symbol))];
+    // 全量目录合并搜索
+    await this.ensureDirectoryReady();
+    const dirResults = this.persistence
+      .searchDirectory(q, 20)
+      .filter(r => !customSymbols.has(r.symbol) && !staticSymbols.has(r.symbol))
+      .map(r => ({
+        symbol: r.symbol,
+        name: r.name,
+        market: 'A' as const,
+        industry:
+          r.market === 'bj' ? '北交所' : r.market === 'sh' ? '沪市' : '深市',
+        price: r.price,
+        change: 0,
+        changePercent: r.changePercent,
+        volume: 0,
+        marketCap: 0,
+        pe: 0,
+        pb: 0,
+        roe: 0,
+        high52w: 0,
+        low52w: 0,
+      }));
+
+    return [...customStocks, ...staticResults, ...dirResults];
   }
 
   /**
@@ -357,40 +499,42 @@ export class StockService {
   }
 
   /**
-   * Get K-line data (simulated based on real price)
+   * Get K-line data (real daily K from Sina Finance)
+   * 接口：CN_MarketDataService.getKLineData，scale=240（日K）
+   * 失败时返回空数组（不回退模拟数据，保证数据诚实性）
    */
   async getKlineData(symbol: string, period: string = 'daily', limit: number = 60): Promise<KlineData[]> {
-    const stock = await this.fetchRealtimeQuote(symbol);
-    if (!stock || stock.price === 0) return [];
+    const code = this.getStockCode(symbol);
+    const scale = period === 'weekly' ? 1680 : period === 'monthly' ? 7200 : 240;
+    const datalen = Math.max(5, Math.min(limit, 250));
+    const url = `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=${code}&scale=${scale}&ma=no&datalen=${datalen}`;
 
-    const data: KlineData[] = [];
-    const basePrice = stock.price * 0.85;
-    const now = new Date();
-
-    for (let i = limit; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-
-      const trend = Math.sin(i / 10) * 0.1;
-      const noise = (Math.random() - 0.5) * 0.05;
-      const priceMultiplier = 1 + trend + noise;
-      const close = basePrice * priceMultiplier;
-      const open = close * (1 + (Math.random() - 0.5) * 0.02);
-      const high = Math.max(open, close) * (1 + Math.random() * 0.015);
-      const low = Math.min(open, close) * (1 - Math.random() * 0.015);
-      const volume = Math.floor(stock.volume * (0.5 + Math.random()));
-
-      data.push({
-        date: date.toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume,
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Referer: 'https://finance.sina.com.cn',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
       });
+      if (!response.ok) return [];
+      const text = await response.text();
+      const match = text.match(/\((\[[\s\S]*\])\)/);
+      if (!match) return [];
+      const arr = JSON.parse(match[1]) as Array<{
+        day: string; open: string; high: string; low: string; close: string; volume: string;
+      }>;
+      return arr.slice(-datalen).map(k => ({
+        date: k.day,
+        open: Number(k.open),
+        high: Number(k.high),
+        low: Number(k.low),
+        close: Number(k.close),
+        volume: Number(k.volume) || 0,
+      }));
+    } catch (error) {
+      this.logger.error(`Failed to fetch kline for ${symbol}: ${error.message}`);
+      return [];
     }
-
-    return data;
   }
 
   /**

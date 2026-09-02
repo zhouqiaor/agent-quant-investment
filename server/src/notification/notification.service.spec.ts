@@ -2,6 +2,10 @@ import { Test } from '@nestjs/testing';
 import { NotificationService } from './notification.service';
 import { PersistenceService } from '../persistence/persistence.service';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('NotificationService (TDD)', () => {
   let service: NotificationService;
 
@@ -114,3 +118,11 @@ describe('NotificationService (TDD)', () => {
     });
   });
 });
+
+  afterAll(async () => {
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
+  });

@@ -215,6 +215,18 @@ export class PersistenceService implements OnModuleInit {
         market TEXT DEFAULT 'A',
         createdAt INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS stock_directory (
+        symbol TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        market TEXT NOT NULL,
+        price REAL DEFAULT 0,
+        changePercent REAL DEFAULT 0,
+        pe REAL,
+        pb REAL,
+        mktcap REAL,
+        updatedAt INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_directory_name ON stock_directory(name);
       CREATE TABLE IF NOT EXISTS watch_stocks (
         symbol TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -336,6 +348,96 @@ export class PersistenceService implements OnModuleInit {
 
   deleteCustomStock(symbol: string): boolean {
     return this.db.prepare('DELETE FROM custom_stocks WHERE symbol = ?').run(symbol).changes > 0;
+  }
+
+  // ==================== 股票目录（全量A股+北交所） ====================
+  /** 批量 upsert 全量目录（事务写入，幂等） */
+  upsertDirectoryBatch(
+    rows: Array<{
+      symbol: string;
+      name: string;
+      market: string;
+      price: number;
+      changePercent: number;
+      pe: number | null;
+      pb: number | null;
+      mktcap: number | null;
+    }>,
+  ): void {
+    if (rows.length === 0) return;
+    const stmt = this.db.prepare(
+      `INSERT OR REPLACE INTO stock_directory
+       (symbol, name, market, price, changePercent, pe, pb, mktcap, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const now = Date.now();
+    this.db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        stmt.run(r.symbol, r.name, r.market, r.price, r.changePercent, r.pe, r.pb, r.mktcap, now);
+      }
+    })(rows);
+  }
+
+  /** 搜索目录：代码前缀优先 + 名称包含，去重合并 */
+  searchDirectory(
+    q: string,
+    limit = 20,
+  ): Array<{
+    symbol: string;
+    name: string;
+    market: string;
+    price: number;
+    changePercent: number;
+  }> {
+    const query = q.trim();
+    if (!query) return [];
+    const byCode = this.db
+      .prepare(
+        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE symbol LIKE ? ORDER BY symbol LIMIT ?',
+      )
+      .all(`${query}%`, limit) as Array<{
+      symbol: string;
+      name: string;
+      market: string;
+      price: number;
+      changePercent: number;
+    }>;
+    const byName = this.db
+      .prepare(
+        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE name LIKE ? ORDER BY symbol LIMIT ?',
+      )
+      .all(`%${query}%`, limit) as Array<{
+      symbol: string;
+      name: string;
+      market: string;
+      price: number;
+      changePercent: number;
+    }>;
+    const seen = new Set(byCode.map((r) => r.symbol));
+    return [...byCode, ...byName.filter((r) => !seen.has(r.symbol))].slice(0, limit);
+  }
+
+  directoryCount(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS c FROM stock_directory').get() as { c: number };
+    return row.c;
+  }
+
+  getDirectoryMeta(
+    symbol: string,
+  ): { symbol: string; name: string; market: string; price: number } | null {
+    const row = this.db
+      .prepare('SELECT symbol, name, market, price FROM stock_directory WHERE symbol = ?')
+      .get(symbol) as { symbol: string; name: string; market: string; price: number } | undefined;
+    return row || null;
+  }
+
+  /** 目录同步时间存于 beta_config（clearAllData 会重置触发重新同步，目录数据本身保留） */
+  getDirectoryLastSyncAt(): number {
+    return this.getBetaConfig<number>('directory_last_sync_at') || 0;
+  }
+
+  setDirectoryLastSyncAt(ts: number): void {
+    this.saveBetaConfig('directory_last_sync_at', ts);
   }
 
   // ==================== 关注列表（Watchlist） ====================

@@ -11,6 +11,10 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '@/app.module';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('E2E 自定义股票/金额回测全流程', () => {
   let app: INestApplication;
   const CUSTOM_SYMBOL = '601888';
@@ -28,6 +32,11 @@ describe('E2E 自定义股票/金额回测全流程', () => {
 
   afterAll(async () => {
     await app.close();
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
   });
 
   it('步骤1: 添加自定义股票并可见于搜索（isCustom 标记优先）', async () => {

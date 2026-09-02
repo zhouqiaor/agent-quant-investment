@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MarketPollingService } from './market-polling.service';
 import { MarketService } from './market.service';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('MarketPollingService (TDD)', () => {
   let service: MarketPollingService;
   let tickCount: number;
@@ -75,3 +79,11 @@ describe('MarketPollingService (TDD)', () => {
     expect(Array.isArray(payload)).toBe(true);
   });
 });
+
+  afterAll(async () => {
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
+  });

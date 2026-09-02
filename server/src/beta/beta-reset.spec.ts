@@ -8,6 +8,10 @@ import { AppModule } from '../app.module';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 
+// 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
+const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
+process.env.SQLITE_PATH = TEST_DB;
+
 describe('从零重置（POST /api/beta/reset-all）', () => {
   let app: INestApplication;
 
@@ -20,6 +24,11 @@ describe('从零重置（POST /api/beta/reset-all）', () => {
 
   afterAll(async () => {
     await app.close();
+    try {
+      require('fs').unlinkSync(TEST_DB);
+    } catch (e) {
+      /* ignore */
+    }
   });
 
   async function seedDirtyData() {

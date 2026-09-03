@@ -3,6 +3,7 @@ import { View, Text, ScrollView } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
 import { Network } from '@/network'
 import { Card, CardContent } from '@/components/ui/card'
+import { CandleChart } from '@/components/chart/candle-chart'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -33,6 +34,23 @@ export default function PositionPage() {
   const [buyQty, setBuyQty] = useState('')
   const [buyPrice, setBuyPrice] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [kline, setKline] = useState<any[]>([])
+  const [klinePeriod, setKlinePeriod] = useState<'30' | '60' | '120'>('30')
+
+  const loadKline = useCallback(async () => {
+    try {
+      const res = await Network.request({
+        url: '/api/stock/kline',
+        data: { symbol, period: 'daily', limit: klinePeriod },
+      })
+      const list = res.data?.data || []
+      // 最近 N 根
+      setKline(list.slice(-parseInt(klinePeriod)))
+    } catch (e) {
+      console.error('[position] kline error', e)
+      setKline([])
+    }
+  }, [symbol, klinePeriod])
 
   const loadPosition = useCallback(async () => {
     setLoading(true)
@@ -50,7 +68,8 @@ export default function PositionPage() {
 
   useEffect(() => {
     loadPosition()
-  }, [loadPosition])
+    loadKline()
+  }, [loadPosition, loadKline])
 
   const fmtMoney = (n: number) => (n >= 0 ? '' : '-') + '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
@@ -184,6 +203,46 @@ export default function PositionPage() {
                 </View>
               </View>
             </View>
+          </CardContent>
+        </Card>
+
+        {/* K线图 */}
+        <Card className="bg-slate-800 border-slate-700 rounded-2xl mb-4">
+          <CardContent className="p-4">
+            <View className="flex flex-row items-center justify-between mb-3">
+              <Text className="block text-sm font-medium text-white">日K走势</Text>
+              <View className="flex flex-row gap-1">
+                {(['30', '60', '120'] as const).map((p) => (
+                  <Badge
+                    key={p}
+                    className={`${klinePeriod === p
+                      ? 'bg-emerald-500 text-white border-emerald-500'
+                      : 'bg-slate-700 text-slate-400 border-slate-600'}`}
+                    onClick={() => setKlinePeriod(p)}
+                  >
+                    {p}日
+                  </Badge>
+                ))}
+              </View>
+            </View>
+            {kline.length > 0 ? (
+              <CandleChart
+                // @ts-expect-error 数据字段类型兼容
+                data={kline.map((k: any) => ({
+                  time: k.date?.slice(5) || k.day?.slice(5) || '',
+                  open: parseFloat(k.open),
+                  high: parseFloat(k.high),
+                  low: parseFloat(k.low),
+                  close: parseFloat(k.close),
+                }))}
+                costPrice={position?.avgCost}
+                height={220}
+              />
+            ) : (
+              <View className="flex items-center justify-center h-48">
+                <Text className="block text-xs text-slate-500">暂无K线数据</Text>
+              </View>
+            )}
           </CardContent>
         </Card>
 

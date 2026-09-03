@@ -1,6 +1,6 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Network } from '@/network'
 import { TrendingUp, TrendingDown, Play, Target, TriangleAlert, ChartBar } from 'lucide-react-taro'
+import { LineChart } from '@/components/chart/line-chart'
 
 interface BacktestResult {
   symbol: string
@@ -56,6 +57,30 @@ export default function BacktestPage() {
   const [indicators, setIndicators] = useState(['MA', 'MACD'])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
+
+  // 收益曲线数据（净值基准，1.0 起）
+  const equityPoints = useMemo(() => {
+    if (!result?.equityCurve?.length || result.initialCapital <= 0) return []
+    const trades = result.trades || []
+    return result.equityCurve.map(p => {
+      // 找当天是否有交易（用于标记买卖点，取当天第一笔）
+      const dayTrade = trades.find(t => t.date === p.date)
+      return {
+        label: p.date.slice(5), // MM-DD
+        value: p.value / result.initialCapital,
+        marker: dayTrade?.type as ('BUY' | 'SELL' | undefined),
+      }
+    })
+  }, [result])
+
+  // 回撤曲线（百分比）
+  const drawdownPoints = useMemo(() => {
+    if (!result?.equityCurve?.length) return []
+    return result.equityCurve.map(p => ({
+      label: p.date.slice(5),
+      value: -p.drawdown, // 画在零轴下方更直观，用负数
+    }))
+  }, [result])
 
   const handleBacktest = async () => {
     const capital = parseInt(initialCapital)
@@ -308,6 +333,57 @@ export default function BacktestPage() {
                     </Text>
                   </View>
                 </View>
+              </CardContent>
+            </Card>
+
+            {/* 收益曲线 */}
+            <Card className="bg-slate-800 border-slate-700 mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-slate-100 text-base flex items-center gap-2">
+                  <ChartBar size={16} color="#10b981" />
+                  <Text className="block">收益曲线</Text>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <LineChart
+                  data={equityPoints}
+                  color={result.totalReturn >= 0 ? '#ef4444' : '#22c55e'}
+                  fillColors={
+                    result.totalReturn >= 0
+                      ? ['rgba(239, 68, 68, 0.3)', 'rgba(239, 68, 68, 0)']
+                      : ['rgba(34, 197, 94, 0.3)', 'rgba(34, 197, 94, 0)']
+                  }
+                  height={180}
+                  formatValue={(v) => v.toFixed(3)}
+                />
+                <View className="flex gap-4 mt-2 justify-center">
+                  <View className="flex items-center gap-1">
+                    <View className="w-2 h-2 rounded-full bg-red-500" />
+                    <Text className="block text-xs text-slate-400">▲ 买入</Text>
+                  </View>
+                  <View className="flex items-center gap-1">
+                    <View className="w-2 h-2 rounded-full bg-green-500" />
+                    <Text className="block text-xs text-slate-400">▼ 卖出</Text>
+                  </View>
+                </View>
+              </CardContent>
+            </Card>
+
+            {/* 回撤走势 */}
+            <Card className="bg-slate-800 border-slate-700 mb-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-slate-100 text-sm">回撤走势</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <LineChart
+                  data={drawdownPoints}
+                  color="#f97316"
+                  fillColors={['rgba(249, 115, 22, 0.2)', 'rgba(249, 115, 22, 0)']}
+                  height={90}
+                  showZeroLine
+                  formatValue={(v) => `${v.toFixed(1)}%`}
+                  emptyText="暂无回撤数据"
+                />
               </CardContent>
             </Card>
 

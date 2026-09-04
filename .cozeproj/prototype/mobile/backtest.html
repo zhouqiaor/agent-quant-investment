@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <!-- 字体（按需，系统字体时省略；只能用 Google 字体，CSS 地址前缀：https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google） -->
+  <!-- <link href="https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google/google-all-fonts.css" rel="stylesheet"/> -->
+
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/jquery/jquery-3.7.1.min.js"></script>
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/lucide/lucide-1.11.0.min.js"></script>
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/tailwindcss/tailwindcss-browser-4.2.4.min.js"></script>
+
+  <style type="text/tailwindcss">
+    @theme {
+      /* === 品牌色 === */
+            --color-primary:              #10b981;
+      --color-primary-container:    #064e3b;
+      --color-on-primary:           #ffffff;
+      --color-background:                 #0f172a;
+      --color-surface-container-lowest:   #0b1220;
+      --color-surface:                    #1e293b;
+      --color-surface-container:          #24334a;
+      --color-surface-container-high:     #2c3d57;
+      --color-surface-container-highest:  #364963;
+      --color-on-surface:           #f1f5f9;
+      --color-on-surface-variant:   #94a3b8;
+      --color-success:  #22c55e;
+      --color-error:    #ef4444;
+      --color-warning:  #f59e0b;
+      --color-outline:          #475569;
+      --color-outline-variant:  #334155;
+      --radius-sm:   0.375rem;
+      --radius-md:   0.5rem;
+      --radius-lg:   0.75rem;
+      --radius-xl:   0.875rem;
+      --radius-2xl:  1rem;
+      --radius-full: 9999px;
+      --shadow-card:   0 4px 12px rgba(0,0,0,0.3);
+      --shadow-float:  0 10px 25px rgba(0,0,0,0.4);
+      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.5);
+      --font-sans: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    }
+  </style>
+
+  <style>
+    body {
+      min-height: max(812px, 100dvh);
+      font-family: system-ui, sans-serif;
+    }
+  </style>
+
+  <!-- 图片兜底 -->
+  <script>
+    document.addEventListener('error', function (e) {
+      const img = e.target;
+      if (img.tagName !== 'IMG' || img.dataset.fallback) return;
+      img.dataset.fallback = '1';
+      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const cat = img.getAttribute('data-category') || '其他';
+      const alt = img.getAttribute('alt') || '';
+      const label = esc(alt.length > 8 ? alt.slice(0, 8) + '…' : alt);
+      const icons = { '人物': '👤', '自然风景': '🏞', '动物': '🐾', '建筑城市': '🏙', '运动体育': '⚽', '交通工具': '🚗', '食物': '🍽', '服饰时尚': '👗', '商业科技': '💼', '游戏娱乐': '🎮', '艺术': '🎨', '其他': '🖼' };
+      const icon = icons[cat] || '🖼';
+      const w = img.width || 400, h = img.height || 300;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="%23f3f4f6"/><text x="50%" y="45%" text-anchor="middle" font-size="${Math.min(w, h) * 0.18}" dominant-baseline="central">${icon}</text><text x="50%" y="68%" text-anchor="middle" font-size="${Math.min(w, h) * 0.07}" fill="%239ca3af" font-family="system-ui,sans-serif" dominant-baseline="central">${label}</text></svg>`;
+      img.src = 'data:image/svg+xml,' + svg;
+    }, true);
+  </script>
+</head>
+
+<body class="bg-background text-on-surface font-sans">
+
+  <!-- 二级页：无 TabBar（骨架 @nav 区已整段删除），顶部返回栏 -->
+  <header class="bg-background sticky top-0 z-40 h-14 flex items-center gap-1 px-2">
+    <button id="btn-back" aria-label="返回上一页"
+            class="w-10 h-10 flex items-center justify-center text-on-surface-variant rounded-full
+                   hover:bg-surface-container active:bg-surface-container-high transition-colors">
+      <i data-lucide="arrow-left" class="w-5 h-5"></i>
+    </button>
+    <h1 class="text-base font-semibold text-on-surface">回测结果</h1>
+  </header>
+
+  <main class="flex-1">
+    <div class="px-4 pt-3 pb-6">
+
+      <!-- 1. 数据来源横幅（本页核心验证点：真实历史行情徽标） -->
+      <div id="data-source-banner"
+           class="bg-primary-container/60 border border-primary/30 rounded-lg px-3 py-2 flex items-center gap-2">
+        <i data-lucide="database" class="w-4 h-4 text-primary shrink-0"></i>
+        <span class="flex-1 text-primary text-xs font-medium">数据来源：腾讯历史K线（前复权）· 真实行情</span>
+        <i data-lucide="badge-check" class="w-4 h-4 text-primary shrink-0"></i>
+      </div>
+
+      <!-- 2. 回测标的概要行 -->
+      <div id="backtest-summary" class="bg-surface rounded-lg p-3 mt-3">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-base font-bold text-on-surface">章源钨业 <span class="text-on-surface-variant">002378</span></h2>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/15 text-primary shrink-0">双均线策略</span>
+        </div>
+        <p class="text-xs text-on-surface-variant mt-1">2024-01-02 ~ 2024-06-28 · 120 个交易日</p>
+      </div>
+
+      <!-- 3. 核心指标 4 宫格 -->
+      <div id="metric-grid" class="bg-surface rounded-lg p-3 mt-3">
+        <div class="grid grid-cols-4 gap-2">
+          <!-- 指标1：总收益率（正收益 · 大字 text-success） -->
+          <div>
+            <p class="text-xs text-on-surface-variant">总收益率</p>
+            <p class="text-lg font-bold text-success mt-0.5">+18.42%</p>
+          </div>
+          <!-- 指标2：年化收益 -->
+          <div>
+            <p class="text-xs text-on-surface-variant">年化收益</p>
+            <p class="text-base font-semibold text-success mt-0.5">+41.36%</p>
+          </div>
+          <!-- 指标3：最大回撤（风险警示 · text-error） -->
+          <div>
+            <p class="text-xs text-on-surface-variant">最大回撤</p>
+            <p class="text-base font-semibold text-error mt-0.5">-6.24%</p>
+          </div>
+          <!-- 指标4：夏普比率 -->
+          <div>
+            <p class="text-xs text-on-surface-variant">夏普比率</p>
+            <p class="text-base font-semibold text-on-surface mt-0.5">1.86</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 收益净值曲线卡（红涨绿跌：收益为正 = 红色曲线 #ef4444） -->
+      <div id="card-nav-chart" class="bg-surface rounded-lg p-4 mt-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-on-surface">收益曲线（净值）</h3>
+          <span class="text-xs text-on-surface-variant">净值 1.1842</span>
+        </div>
+        <!-- 内嵌 SVG 折线：320x160 · 红色曲线 + rgba(239,68,68,0.15) 渐变填充 -->
+        <svg viewBox="0 0 320 160" class="w-full h-auto mt-2" role="img"
+             aria-label="收益净值曲线，2024年1月2日至6月28日，净值由1.00增长至1.1842">
+          <defs>
+            <linearGradient id="nav-area-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(239,68,68,0.15)" />
+              <stop offset="100%" stop-color="rgba(239,68,68,0)" />
+            </linearGradient>
+          </defs>
+
+          <!-- Y 轴网格线（净值 0.95 / 1.00 / 1.05 / 1.10 / 1.15） -->
+          <g stroke="var(--color-outline-variant)" stroke-opacity="0.45" stroke-width="1">
+            <line x1="36" y1="132" x2="312" y2="132" />
+            <line x1="36" y1="107.6" x2="312" y2="107.6" />
+            <line x1="36" y1="83.2" x2="312" y2="83.2" />
+            <line x1="36" y1="58.8" x2="312" y2="58.8" />
+            <line x1="36" y1="34.4" x2="312" y2="34.4" />
+          </g>
+          <!-- Y 轴刻度文字 -->
+          <g fill="var(--color-on-surface-variant)" font-size="9" text-anchor="end" font-family="system-ui,sans-serif">
+            <text x="30" y="135.5">0.95</text>
+            <text x="30" y="111.1">1.00</text>
+            <text x="30" y="86.7">1.05</text>
+            <text x="30" y="62.3">1.10</text>
+            <text x="30" y="37.9">1.15</text>
+          </g>
+          <!-- X 轴日期刻度（01-02 / 03-01 / 04-15 / 06-28） -->
+          <g fill="var(--color-on-surface-variant)" font-size="9" font-family="system-ui,sans-serif">
+            <text x="36" y="150" text-anchor="start">01-02</text>
+            <text x="133.4" y="150" text-anchor="middle">03-01</text>
+            <text x="207.5" y="150" text-anchor="middle">04-15</text>
+            <text x="312" y="150" text-anchor="end">06-28</text>
+          </g>
+
+          <!-- 净值曲线下方渐变填充区（rgba(239,68,68,0.15) → 0） -->
+          <polygon fill="url(#nav-area-fill)"
+                   points="36,107.6 47,107.6 59.2,107.6 70,104 79,101 88,104 97,98 106,94 119.5,84.7 133.4,84.7 150,84.7 165.8,84.7 178,77 190,70 205,63 219.1,58.8 230,66 240,75 242.3,79.7 246.9,76.7 260,76.7 281.7,76.7 290,66 298,46 305,30 312,17.8 312,132 36,132" />
+          <!-- 净值折线（红色 #ef4444，峰值 1.10 → 低谷 1.031 对应最大回撤 -6.24%，终点 1.184） -->
+          <polyline fill="none" stroke="#ef4444" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
+                    points="36,107.6 47,107.6 59.2,107.6 70,104 79,101 88,104 97,98 106,94 119.5,84.7 133.4,84.7 150,84.7 165.8,84.7 178,77 190,70 205,63 219.1,58.8 230,66 240,75 242.3,79.7 246.9,76.7 260,76.7 281.7,76.7 290,66 298,46 305,30 312,17.8" />
+
+          <!-- 买卖点标记 1：2024-01-16 首次买入（红三角▲） -->
+          <polygon fill="#ef4444" points="59.2,113 54.7,121 63.7,121" />
+          <!-- 买卖点标记 2：2024-02-22 死叉卖出（绿三角▼） -->
+          <polygon fill="#22c55e" points="114.5,68 124.5,68 119.5,76" />
+          <!-- 买卖点标记 3：2024-03-20 金叉再买入（红三角▲） -->
+          <polygon fill="#ef4444" points="165.8,90 161.3,98 170.3,98" />
+
+          <!-- 曲线终点：净值 1.184（+18.42%） -->
+          <circle cx="312" cy="17.8" r="3" fill="#ef4444" stroke="var(--color-background)" stroke-width="1.5" />
+          <text x="312" y="11" text-anchor="end" fill="#f1f5f9" font-size="10" font-weight="bold"
+                font-family="system-ui,sans-serif">1.184</text>
+        </svg>
+      </div>
+
+      <!-- 5. 交易明细折叠列表卡（默认展开，点击标题收起/展开） -->
+      <div id="card-trades" class="bg-surface rounded-lg p-4 mt-3">
+        <button id="trade-toggle" aria-expanded="true" aria-controls="trade-list-body"
+                class="w-full flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-on-surface">交易明细（5 笔）</h3>
+          <i id="trade-chevron" data-lucide="chevron-down"
+             class="w-4 h-4 text-on-surface-variant transition-transform"></i>
+        </button>
+
+        <div id="trade-list-body" class="mt-3">
+          <!-- 表头 -->
+          <div class="flex items-center text-[10px] text-on-surface-variant pb-1.5 border-b border-outline-variant/20">
+            <span class="flex-[1.1]">日期</span>
+            <span class="flex-[0.8] text-center">方向</span>
+            <span class="flex-1 text-right">价格</span>
+            <span class="flex-1 text-right">数量(股)</span>
+            <span class="flex-[0.9] text-right">盈亏</span>
+          </div>
+
+          <!-- 列表-交易1：2024-01-16 金叉建仓买入 -->
+          <div class="flex items-center py-2 text-xs border-b border-outline-variant/10">
+            <span class="flex-[1.1] text-on-surface-variant">01-16</span>
+            <span class="flex-[0.8] text-center"><span
+                class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-error/15 text-error">BUY</span></span>
+            <span class="flex-1 text-right text-on-surface">6.85</span>
+            <span class="flex-1 text-right text-on-surface">10,000</span>
+            <span class="flex-[0.9] text-right text-on-surface-variant">—</span>
+          </div>
+
+          <!-- 列表-交易2：2024-02-22 死叉止盈卖出，盈利 +4,700 -->
+          <div class="flex items-center py-2 text-xs border-b border-outline-variant/10">
+            <span class="flex-[1.1] text-on-surface-variant">02-22</span>
+            <span class="flex-[0.8] text-center"><span
+                class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success">SELL</span></span>
+            <span class="flex-1 text-right text-on-surface">7.32</span>
+            <span class="flex-1 text-right text-on-surface">10,000</span>
+            <span class="flex-[0.9] text-right font-medium text-success">+4,700</span>
+          </div>
+
+          <!-- 列表-交易3：2024-03-20 金叉再买入 -->
+          <div class="flex items-center py-2 text-xs border-b border-outline-variant/10">
+            <span class="flex-[1.1] text-on-surface-variant">03-20</span>
+            <span class="flex-[0.8] text-center"><span
+                class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-error/15 text-error">BUY</span></span>
+            <span class="flex-1 text-right text-on-surface">7.15</span>
+            <span class="flex-1 text-right text-on-surface">10,000</span>
+            <span class="flex-[0.9] text-right text-on-surface-variant">—</span>
+          </div>
+
+          <!-- 列表-交易4：2024-05-08 死叉止损卖出，亏损 -1,000 -->
+          <div class="flex items-center py-2 text-xs border-b border-outline-variant/10">
+            <span class="flex-[1.1] text-on-surface-variant">05-08</span>
+            <span class="flex-[0.8] text-center"><span
+                class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success">SELL</span></span>
+            <span class="flex-1 text-right text-on-surface">7.05</span>
+            <span class="flex-1 text-right text-on-surface">10,000</span>
+            <span class="flex-[0.9] text-right font-medium text-error">-1,000</span>
+          </div>
+
+          <!-- 列表-交易5：2024-06-12 买入并持仓至回测结束 -->
+          <div class="flex items-center py-2 text-xs">
+            <span class="flex-[1.1] text-on-surface-variant">06-12</span>
+            <span class="flex-[0.8] text-center"><span
+                class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-error/15 text-error">BUY</span></span>
+            <span class="flex-1 text-right text-on-surface">7.02</span>
+            <span class="flex-1 text-right text-on-surface">10,000</span>
+            <span class="flex-[0.9] text-right text-on-surface-variant">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 状态 B 演示：数据不足失败态（回测引擎 success:false + reason 场景） -->
+      <section id="section-fail-demo" class="mt-8">
+        <p class="text-xs text-on-surface-variant mb-2">数据不足时的失败态</p>
+        <div class="bg-surface/50 border border-dashed border-outline-variant rounded-lg p-6 text-center">
+          <i data-lucide="alert-triangle" class="w-8 h-8 text-warning mx-auto"></i>
+          <p class="text-sm font-medium text-on-surface mt-3 leading-relaxed">
+            002378 历史数据仅 86 个交易日<br />不满足「双均线策略」所需的 120 天回测区间
+          </p>
+          <p class="text-xs text-on-surface-variant mt-2 leading-relaxed">
+            可回测区间：2024-02-26 ~ 2024-06-28<br />请缩短回测区间或更换标的后重试
+          </p>
+          <button id="btn-retry"
+                  class="mt-4 w-full bg-primary text-on-primary rounded-md py-3 text-sm font-medium
+                         hover:opacity-90 active:scale-[0.98] transition-all">
+            重新回测
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    // ===== 导航辅助函数（Mobile 规范要求每页定义） =====
+    function navPush(route) {
+      console.log(`[原型演示] PUSH 到: ${route}`);
+      window.location.href = route;
+    }
+    function navReplace(route) {
+      console.log(`[原型演示] REPLACE 为: ${route}`);
+      window.location.replace(route);
+    }
+    function navReset(route) {
+      console.log(`[原型演示] RESET 到: ${route}`);
+      window.location.href = route;
+    }
+    function navBack() {
+      console.log('[原型演示] BACK 返回上一页');
+      if (window.history.length > 1) window.history.back();
+    }
+
+    $(function () {
+      // 顶部返回栏：返回上一页（回测配置页/首页）
+      $('#btn-back').on('click', function () {
+        navBack();
+      });
+
+      // 交易明细折叠/展开：切换列表显隐 + 箭头旋转
+      $('#trade-toggle').on('click', function () {
+        const $body = $('#trade-list-body');
+        const willHide = !$body.hasClass('hidden');
+        $body.toggleClass('hidden');
+        $('#trade-chevron').toggleClass('rotate-180', willHide);
+        $(this).attr('aria-expanded', String(!willHide));
+        console.log(`[原型演示] 交易明细 ${willHide ? '收起' : '展开'}`);
+      });
+
+      // 失败态「重新回测」：需接入回测接口（POST /api/backtest），以可回测区间重新发起
+      // 1. 读取可回测区间（2024-02-26 ~ 2024-06-28）自动填充参数表单
+      // 2. 调用回测接口并展示 loading 骨架
+      // 3. 成功则渲染结果区，失败则保留本失败态卡片并更新 reason
+      $('#btn-retry').on('click', function () {
+        console.log('[原型演示] 重新回测：调用回测接口（可回测区间 2024-02-26 ~ 2024-06-28，缩短区间后重试）');
+      });
+    });
+  </script>
+
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

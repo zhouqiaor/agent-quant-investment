@@ -1,0 +1,28 @@
+{
+  "elements": [
+    {
+      "type": "html",
+      "options": {
+        "path": ".cozeproj/prototype/mobile/home.html"
+      },
+      "title": "首页看盘",
+      "size": "mobile"
+    },
+    {
+      "type": "html",
+      "options": {
+        "path": ".cozeproj/prototype/mobile/backtest.html"
+      },
+      "title": "回测结果",
+      "size": "mobile"
+    },
+    {
+      "type": "html",
+      "options": {
+        "path": ".cozeproj/prototype/mobile/profile.html"
+      },
+      "title": "我的·数据来源",
+      "size": "mobile"
+    }
+  ]
+}

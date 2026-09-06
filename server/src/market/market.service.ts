@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
+import { PersistenceService } from '../persistence/persistence.service';
 import * as iconv from 'iconv-lite';
 
 export interface MarketItem {
@@ -43,7 +44,10 @@ export class MarketService {
   private lastFetchTime = 0;
   private readonly CACHE_TTL = 5000; // 5 seconds cache
 
-  constructor(private readonly strategyService: StrategyService) {}
+  constructor(
+    private readonly strategyService: StrategyService,
+    private readonly persistence: PersistenceService,
+  ) {}
 
   /**
    * Fetch real-time market data from Sina Finance API
@@ -58,9 +62,17 @@ export class MarketService {
 
     try {
       // Build stock code list for Sina API
-      const stockList = symbols.length > 0 
-        ? symbols.map(s => this.getStockCode(s))
-        : DEFAULT_WATCHLIST.map(s => `${s.market}${s.symbol}`);
+      let stockList: string[];
+      if (symbols.length > 0) {
+        stockList = symbols.map(s => this.getStockCode(s));
+      } else {
+        // Include default watchlist + custom stocks
+        const defaultCodes = DEFAULT_WATCHLIST.map(s => `${s.market}${s.symbol}`);
+        const customStocks = this.persistence.listCustomStocks();
+        const customCodes = customStocks.map(s => this.getStockCode(s.symbol));
+        // Deduplicate
+        stockList = [...new Set([...defaultCodes, ...customCodes])];
+      }
 
       const url = `https://hq.sinajs.cn/list=${stockList.join(',')}`;
       

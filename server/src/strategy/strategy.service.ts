@@ -176,7 +176,7 @@ export class StrategyService {
       takeProfit: data.takeProfit || 15,
       autoTrade: data.autoTrade || false,
       monitorEnabled: data.monitorEnabled !== false,
-      status: 'stopped',
+      status: data.status || 'stopped',
       pnl: 0,
       pnlRate: 0,
       winRate: 0,

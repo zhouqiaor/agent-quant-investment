@@ -92,6 +92,25 @@ export class PortfolioBacktestService {
     this.paperTrading.resetAccount(accountId, initialCapital);
     this.paperTrading.startTrading(accountId);
 
+    // 4.5) 为每个标的确保有策略（没有则创建临时默认策略）
+    const tempStrategyIds: string[] = [];
+    for (const symbol of symbols) {
+      const existingStrategy = this.strategyService.getCustomStrategies().find(s => s.symbol === symbol && s.monitorEnabled && s.status === 'running');
+      if (!existingStrategy) {
+        // 创建临时默认策略：跌 2% 买入，涨 2% 卖出
+        const tempStrategy = this.strategyService.createCustomStrategy({
+          name: `回测默认-${symbol}`,
+          symbol,
+          monitorEnabled: true,
+          status: 'running',
+          autoTrade: true,
+          buyConditions: [{ id: `bt_buy_${symbol}`, indicator: 'changePercent', operator: 'below', value: -2, description: '跌2%买入' }],
+          sellConditions: [{ id: `bt_sell_${symbol}`, indicator: 'changePercent', operator: 'above', value: 2, description: '涨2%卖出' }],
+        });
+        tempStrategyIds.push(tempStrategy.id);
+      }
+    }
+
     // 5) 逐日回放
     const equityCurve: EquityPoint[] = [];
     let totalSignals = 0;
@@ -161,7 +180,12 @@ export class PortfolioBacktestService {
     const account = this.paperTrading.getAccount(accountId);
     const metrics = this.calculateMetrics(equityCurve, account.trades, initialCapital);
 
-    // 7) 清理隔离账户（可选，保留供前端查询）
+    // 7) 清理临时策略
+    for (const strategyId of tempStrategyIds) {
+      this.strategyService.deleteCustomStrategy(strategyId);
+    }
+
+    // 8) 清理隔离账户（可选，保留供前端查询）
     // this.paperTrading.removeAccount(accountId);
 
     this.logger.log(

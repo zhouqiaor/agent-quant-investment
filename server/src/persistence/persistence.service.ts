@@ -168,6 +168,37 @@ export class PersistenceService implements OnModuleInit {
         extra TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS paper_accounts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        initialCapital REAL NOT NULL,
+        cash REAL NOT NULL,
+        totalValue REAL NOT NULL,
+        totalPnl REAL NOT NULL,
+        totalPnlRate REAL NOT NULL,
+        isRunning INTEGER DEFAULT 0,
+        startDate TEXT NOT NULL,
+        strategies TEXT,
+        createdAt TEXT,
+        updatedAt TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS paper_positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        accountId TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        avgCost REAL NOT NULL,
+        currentPrice REAL NOT NULL,
+        marketValue REAL NOT NULL,
+        pnl REAL NOT NULL,
+        pnlRate REAL NOT NULL,
+        openDate TEXT NOT NULL,
+        createdAt TEXT,
+        updatedAt TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS backtest_results (
         id TEXT PRIMARY KEY,
         symbol TEXT,
@@ -471,6 +502,168 @@ export class PersistenceService implements OnModuleInit {
     return this.db.prepare('DELETE FROM watch_stocks WHERE symbol = ?').run(symbol).changes > 0;
   }
 
+  // ==================== 模拟交易账户/持仓/交易 ====================
+  savePaperAccount(account: {
+    id: string;
+    name: string;
+    initialCapital: number;
+    cash: number;
+    totalValue: number;
+    totalPnl: number;
+    totalPnlRate: number;
+    isRunning: boolean;
+    startDate: string;
+    strategies: string[];
+  }): void {
+    this.init();
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO paper_accounts
+         (id, name, initialCapital, cash, totalValue, totalPnl, totalPnlRate, isRunning, startDate, strategies, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        account.id,
+        account.name,
+        account.initialCapital,
+        account.cash,
+        account.totalValue,
+        account.totalPnl,
+        account.totalPnlRate,
+        account.isRunning ? 1 : 0,
+        account.startDate,
+        JSON.stringify(account.strategies || []),
+        now,
+        now,
+      );
+  }
+
+  loadPaperAccount(accountId: string): any {
+    this.init();
+    const row = this.db.prepare('SELECT * FROM paper_accounts WHERE id = ?').get(accountId) as any;
+    if (!row) return null;
+    return {
+      ...row,
+      isRunning: row.isRunning === 1,
+      strategies: JSON.parse(row.strategies || '[]'),
+    };
+  }
+
+  savePaperPosition(accountId: string, position: {
+    symbol: string;
+    name: string;
+    quantity: number;
+    avgCost: number;
+    currentPrice: number;
+    marketValue: number;
+    pnl: number;
+    pnlRate: number;
+    openDate: string;
+  }): void {
+    this.init();
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO paper_positions
+         (accountId, symbol, name, quantity, avgCost, currentPrice, marketValue, pnl, pnlRate, openDate, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        accountId,
+        position.symbol,
+        position.name,
+        position.quantity,
+        position.avgCost,
+        position.currentPrice,
+        position.marketValue,
+        position.pnl,
+        position.pnlRate,
+        position.openDate,
+        now,
+        now,
+      );
+  }
+
+  loadPaperPositions(accountId: string): any[] {
+    this.init();
+    return this.db
+      .prepare('SELECT * FROM paper_positions WHERE accountId = ? ORDER BY openDate DESC')
+      .all(accountId)
+      .map((r: any) => ({
+        symbol: r.symbol,
+        name: r.name,
+        quantity: r.quantity,
+        avgCost: r.avgCost,
+        currentPrice: r.currentPrice,
+        marketValue: r.marketValue,
+        pnl: r.pnl,
+        pnlRate: r.pnlRate,
+        openDate: r.openDate,
+      }));
+  }
+
+  deletePaperPosition(accountId: string, symbol: string): void {
+    this.init();
+    this.db.prepare('DELETE FROM paper_positions WHERE accountId = ? AND symbol = ?').run(accountId, symbol);
+  }
+
+  savePaperTrade(accountId: string, trade: {
+    id: string;
+    type: string;
+    symbol: string;
+    name: string;
+    price: number;
+    quantity: number;
+    amount: number;
+    reason: string;
+    strategyId: string;
+    time: string;
+  }): void {
+    this.init();
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO trades
+         (id, type, symbol, code, name, price, quantity, amount, reason, time, extra)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        trade.id,
+        trade.type,
+        trade.symbol,
+        trade.symbol,
+        trade.name,
+        trade.price,
+        trade.quantity,
+        trade.amount,
+        trade.reason,
+        trade.time,
+        JSON.stringify({ accountId }),
+      );
+  }
+
+  loadPaperTrades(accountId: string): any[] {
+    this.init();
+    return this.db
+      .prepare(
+        `SELECT id, type, symbol, name, price, quantity, amount, reason, time FROM trades 
+         WHERE extra LIKE ? ORDER BY time DESC`,
+      )
+      .all(`%${accountId}%`)
+      .map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        symbol: r.symbol,
+        name: r.name,
+        price: r.price,
+        quantity: r.quantity,
+        amount: r.amount,
+        reason: r.reason,
+        time: r.time,
+        timestamp: new Date(r.time).getTime(),
+      }));
+  }
+
   // ==================== 内测配置（BetaConfig） ====================
   /** 一键清空全部业务数据（从零重置用），保留表结构 */
   clearAllData(): void {
@@ -483,6 +676,8 @@ export class PersistenceService implements OnModuleInit {
       'notifications',
       'optimizations',
       'beta_config',
+      'paper_accounts',
+      'paper_positions',
     ];
     for (const t of tables) {
       this.db.prepare(`DELETE FROM ${t}`).run();

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
+import { PersistenceService } from '../persistence/persistence.service';
 
 export interface PaperPosition {
   symbol: string;
@@ -47,12 +48,45 @@ export class PaperTradingService {
   private accounts: Map<string, PaperAccount> = new Map();
   private defaultAccountId = 'default';
 
-  constructor(private readonly strategyService: StrategyService) {
-    // 初始化默认账户
+  constructor(
+    private readonly strategyService: StrategyService,
+    private readonly persistenceService: PersistenceService,
+  ) {
+    // 初始化默认账户（优先从持久化恢复）
     this.initDefaultAccount();
   }
 
   private initDefaultAccount() {
+    // 优先从持久化恢复
+    const persistedAccount = this.persistenceService.loadPaperAccount(this.defaultAccountId);
+    if (persistedAccount) {
+      const persistedPositions = this.persistenceService.loadPaperPositions(this.defaultAccountId);
+      const persistedTrades = this.persistenceService.loadPaperTrades(this.defaultAccountId);
+      this.accounts.set(this.defaultAccountId, {
+        id: persistedAccount.id,
+        name: persistedAccount.name,
+        initialCapital: persistedAccount.initialCapital,
+        cash: persistedAccount.cash,
+        positions: persistedPositions,
+        trades: persistedTrades.map((t: any) => {
+          const d = new Date(t.time);
+          return {
+            ...t,
+            date: d.toISOString().split('T')[0],
+            time: t.time,
+          };
+        }),
+        totalValue: persistedAccount.totalValue,
+        totalPnl: persistedAccount.totalPnl,
+        totalPnlRate: persistedAccount.totalPnlRate,
+        isRunning: persistedAccount.isRunning,
+        startDate: persistedAccount.startDate,
+        strategies: persistedAccount.strategies,
+      });
+      return;
+    }
+
+    // 没有持久化数据，创建新账户
     this.accounts.set(this.defaultAccountId, {
       id: this.defaultAccountId,
       name: '模拟交易账户',
@@ -67,6 +101,30 @@ export class PaperTradingService {
       startDate: new Date().toISOString(),
       strategies: [],
     });
+    this.persistAccount(this.defaultAccountId);
+  }
+
+  /** 持久化账户（账户信息 + 持仓 + 交易） */
+  private persistAccount(accountId: string): void {
+    const account = this.accounts.get(accountId);
+    if (!account) return;
+
+    this.persistenceService.savePaperAccount({
+      id: account.id,
+      name: account.name,
+      initialCapital: account.initialCapital,
+      cash: account.cash,
+      totalValue: account.totalValue,
+      totalPnl: account.totalPnl,
+      totalPnlRate: account.totalPnlRate,
+      isRunning: account.isRunning,
+      startDate: account.startDate,
+      strategies: account.strategies,
+    });
+
+    for (const pos of account.positions) {
+      this.persistenceService.savePaperPosition(accountId, pos);
+    }
   }
 
   /**
@@ -97,6 +155,7 @@ export class PaperTradingService {
         account.initialCapital > 0
           ? this.round2((account.totalPnl / account.initialCapital) * 100)
           : 0;
+      this.persistAccount(account.id);
     }
     return account;
   }
@@ -119,6 +178,11 @@ export class PaperTradingService {
     const id = accountId || this.defaultAccountId;
     const capital = initialCapital ?? 100000;
 
+    // 清理旧持久化数据
+    for (const pos of this.persistenceService.loadPaperPositions(id)) {
+      this.persistenceService.deletePaperPosition(id, pos.symbol);
+    }
+
     this.accounts.set(id, {
       id,
       name: '模拟交易账户',
@@ -134,6 +198,7 @@ export class PaperTradingService {
       strategies: [],
     });
 
+    this.persistAccount(id);
     return this.accounts.get(id)!;
   }
 
@@ -144,6 +209,7 @@ export class PaperTradingService {
     if (strategyIds) {
       account.strategies = strategyIds;
     }
+    this.persistAccount(id);
     return account;
   }
 
@@ -151,6 +217,7 @@ export class PaperTradingService {
     const id = accountId || this.defaultAccountId;
     const account = this.getAccount(id);
     account.isRunning = false;
+    this.persistAccount(id);
     return account;
   }
 
@@ -222,6 +289,19 @@ export class PaperTradingService {
       };
       account.trades.push(addTrade);
       this.updateAccountTotal(account);
+      this.persistenceService.savePaperTrade(account.id, {
+        id: addTrade.id,
+        type: addTrade.type,
+        symbol: addTrade.symbol,
+        name: addTrade.name,
+        price: addTrade.price,
+        quantity: addTrade.quantity,
+        amount: addTrade.amount,
+        reason: addTrade.reason,
+        strategyId: addTrade.strategyId,
+        time: `${addTrade.date}T${addTrade.time}`,
+      });
+      this.persistAccount(account.id);
       return { success: true, message: `加仓 ${signal.name} ${qty}股`, trade: addTrade };
     }
 
@@ -274,6 +354,20 @@ export class PaperTradingService {
 
     this.updateAccountTotal(account);
 
+    this.persistenceService.savePaperTrade(account.id, {
+      id: trade.id,
+      type: trade.type,
+      symbol: trade.symbol,
+      name: trade.name,
+      price: trade.price,
+      quantity: trade.quantity,
+      amount: trade.amount,
+      reason: trade.reason,
+      strategyId: trade.strategyId,
+      time: `${trade.date}T${trade.time}`,
+    });
+    this.persistAccount(account.id);
+
     return { success: true, message: `买入 ${signal.name} ${quantity}股`, trade };
   }
 
@@ -321,6 +415,20 @@ export class PaperTradingService {
     account.trades.push(trade);
 
     this.updateAccountTotal(account);
+
+    this.persistenceService.savePaperTrade(account.id, {
+      id: trade.id,
+      type: trade.type,
+      symbol: trade.symbol,
+      name: trade.name,
+      price: trade.price,
+      quantity: trade.quantity,
+      amount: trade.amount,
+      reason: trade.reason,
+      strategyId: trade.strategyId,
+      time: `${trade.date}T${trade.time}`,
+    });
+    this.persistAccount(account.id);
 
     return {
       success: true,

@@ -46,7 +46,7 @@ describe('LivePnlService - 实时收益与自动交易', () => {
     persistence = new PersistenceService(dbPath);
     persistence.init();
     strategy = new StrategyService();
-    paper = new PaperTradingService(strategy);
+    paper = new PaperTradingService(strategy, persistence);
     notification = new NotificationService(persistence);
     watchlist = new WatchlistService(persistence);
     betaConfig = new BetaConfigService(persistence, watchlist, strategy);

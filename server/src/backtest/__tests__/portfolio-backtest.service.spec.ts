@@ -4,6 +4,7 @@ import { StockService } from '../../stock/stock.service';
 import { WatchlistService } from '../../stock/watchlist.service';
 import { PaperTradingService } from '../../paper-trading/paper-trading.service';
 import { StrategyService } from '../../strategy/strategy.service';
+import { PersistenceModule } from '../../persistence/persistence.module';
 
 describe('PortfolioBacktestService', () => {
   let service: PortfolioBacktestService;
@@ -22,6 +23,7 @@ describe('PortfolioBacktestService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [PersistenceModule],
       providers: [
         PortfolioBacktestService,
         { provide: StockService, useValue: mockStockService },

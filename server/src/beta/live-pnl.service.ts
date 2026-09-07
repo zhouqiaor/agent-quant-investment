@@ -69,9 +69,14 @@ export class LivePnlService {
     const signals: MonitorSignal[] = this.strategyService.checkMonitorSignals(watchedData);
     stats.signals = signals.length;
 
-    // 4) 通知 + 自动交易（全局 autoTrade 开关，默认开启）
+    // 4) 通知 + 自动交易（必须先完成引导配置，否则不产生任何信号/交易）
     const config = this.betaConfigService.getConfig();
-    const autoTrade = config ? config.autoTrade !== false : true;
+    // 未配置（未走完引导）时直接跳过，绝不对正式账户自动下单
+    if (!config) {
+      this.lastTickAt = Date.now();
+      return stats;
+    }
+    const autoTrade = config.autoTrade !== false;
 
     for (const signal of signals) {
       const key = `${signal.symbol}:${signal.type}:${signal.price}`;

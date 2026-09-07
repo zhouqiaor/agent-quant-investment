@@ -112,7 +112,8 @@ describe('LivePnlService - 实时收益与自动交易', () => {
   });
 
   it('T5 onTick 确定性买入信号 + autoTrade → 自动成交并通知', async () => {
-    // 从空仓开始：信号触发后由自动交易建仓
+    // 从空仓开始：信号触发后由自动交易建仓（必须先完成引导配置）
+    betaConfig.saveConfig({ initialCapital: 200000, watchSymbols: ['600519'], strategyId: null, autoTrade: true });
     paper.resetAccount('default', 200000);
     paper.startTrading('default', ['s1']);
     const tradesBefore = paper.getAccount().trades.length;

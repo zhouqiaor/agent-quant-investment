@@ -104,10 +104,21 @@ export class PaperTradingService {
     this.persistAccount(this.defaultAccountId);
   }
 
+  /**
+   * 判断是否为应持久化的真实账户。
+   * 回测使用的隔离账户（id 以 `backtest_` 开头）仅在内存中运行，
+   * 绝不写入正式持久化表，避免污染用户的"我的-持仓/交易记录"。
+   */
+  private isPersistentAccount(accountId: string): boolean {
+    return !accountId.startsWith('backtest_');
+  }
+
   /** 持久化账户（账户信息 + 持仓 + 交易） */
   private persistAccount(accountId: string): void {
     const account = this.accounts.get(accountId);
     if (!account) return;
+    // 回测临时账户不落库
+    if (!this.isPersistentAccount(accountId)) return;
 
     this.persistenceService.savePaperAccount({
       id: account.id,
@@ -125,6 +136,23 @@ export class PaperTradingService {
     for (const pos of account.positions) {
       this.persistenceService.savePaperPosition(accountId, pos);
     }
+  }
+
+  /** 持久化单笔交易（回测临时账户跳过，不落库） */
+  private persistTrade(account: PaperAccount, trade: PaperTrade): void {
+    if (!this.isPersistentAccount(account.id)) return;
+    this.persistenceService.savePaperTrade(account.id, {
+      id: trade.id,
+      type: trade.type,
+      symbol: trade.symbol,
+      name: trade.name,
+      price: trade.price,
+      quantity: trade.quantity,
+      amount: trade.amount,
+      reason: trade.reason,
+      strategyId: trade.strategyId,
+      time: `${trade.date}T${trade.time}`,
+    });
   }
 
   /**
@@ -289,18 +317,7 @@ export class PaperTradingService {
       };
       account.trades.push(addTrade);
       this.updateAccountTotal(account);
-      this.persistenceService.savePaperTrade(account.id, {
-        id: addTrade.id,
-        type: addTrade.type,
-        symbol: addTrade.symbol,
-        name: addTrade.name,
-        price: addTrade.price,
-        quantity: addTrade.quantity,
-        amount: addTrade.amount,
-        reason: addTrade.reason,
-        strategyId: addTrade.strategyId,
-        time: `${addTrade.date}T${addTrade.time}`,
-      });
+      this.persistTrade(account, addTrade);
       this.persistAccount(account.id);
       return { success: true, message: `加仓 ${signal.name} ${qty}股`, trade: addTrade };
     }
@@ -354,18 +371,7 @@ export class PaperTradingService {
 
     this.updateAccountTotal(account);
 
-    this.persistenceService.savePaperTrade(account.id, {
-      id: trade.id,
-      type: trade.type,
-      symbol: trade.symbol,
-      name: trade.name,
-      price: trade.price,
-      quantity: trade.quantity,
-      amount: trade.amount,
-      reason: trade.reason,
-      strategyId: trade.strategyId,
-      time: `${trade.date}T${trade.time}`,
-    });
+    this.persistTrade(account, trade);
     this.persistAccount(account.id);
 
     return { success: true, message: `买入 ${signal.name} ${quantity}股`, trade };
@@ -416,18 +422,7 @@ export class PaperTradingService {
 
     this.updateAccountTotal(account);
 
-    this.persistenceService.savePaperTrade(account.id, {
-      id: trade.id,
-      type: trade.type,
-      symbol: trade.symbol,
-      name: trade.name,
-      price: trade.price,
-      quantity: trade.quantity,
-      amount: trade.amount,
-      reason: trade.reason,
-      strategyId: trade.strategyId,
-      time: `${trade.date}T${trade.time}`,
-    });
+    this.persistTrade(account, trade);
     this.persistAccount(account.id);
 
     return {

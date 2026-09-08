@@ -224,6 +224,15 @@ export class PersistenceService implements OnModuleInit {
         createdAt TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS risk_settings (
+        id TEXT PRIMARY KEY,
+        maxDrawdown REAL,
+        stopLossRate REAL,
+        takeProfitRate REAL,
+        maxPositionRate REAL,
+        dailyTradeLimit INTEGER
+      );
+
       CREATE TABLE IF NOT EXISTS optimizations (
         id TEXT PRIMARY KEY,
         symbol TEXT,
@@ -705,6 +714,53 @@ export class PersistenceService implements OnModuleInit {
     } catch {
       return null;
     }
+  }
+
+  // ==================== 风控设置 ====================
+  saveRiskSettings(settings: {
+    maxDrawdown: number;
+    stopLossRate: number;
+    takeProfitRate: number;
+    maxPositionRate: number;
+    dailyTradeLimit: number;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO risk_settings (id, maxDrawdown, stopLossRate, takeProfitRate, maxPositionRate, dailyTradeLimit)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'default',
+        settings.maxDrawdown,
+        settings.stopLossRate,
+        settings.takeProfitRate,
+        settings.maxPositionRate,
+        settings.dailyTradeLimit,
+      );
+  }
+
+  loadRiskSettings(): {
+    maxDrawdown: number;
+    stopLossRate: number;
+    takeProfitRate: number;
+    maxPositionRate: number;
+    dailyTradeLimit: number;
+  } | null {
+    const row = this.db
+      .prepare(
+        'SELECT maxDrawdown, stopLossRate, takeProfitRate, maxPositionRate, dailyTradeLimit FROM risk_settings WHERE id = ?',
+      )
+      .get('default') as
+      | {
+          maxDrawdown: number;
+          stopLossRate: number;
+          takeProfitRate: number;
+          maxPositionRate: number;
+          dailyTradeLimit: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return row;
   }
 
   // ==================== 通知 ====================

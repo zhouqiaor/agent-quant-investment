@@ -7,12 +7,12 @@ export class TradeController {
 
   @Get('history')
   @HttpCode(200)
-  getTradeHistory(@Query('limit') limit?: string) {
+  getTradeHistory(@Query('limit') limit?: string, @Query('symbol') symbol?: string) {
     const limitNum = limit ? parseInt(limit, 10) : 10;
     return {
       code: 200,
       msg: 'success',
-      data: this.tradeService.getTradeHistory(limitNum),
+      data: this.tradeService.getTradeHistory(limitNum, symbol),
     };
   }
 }

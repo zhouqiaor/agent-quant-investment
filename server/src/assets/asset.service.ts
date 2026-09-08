@@ -1,43 +1,91 @@
 import { Injectable } from '@nestjs/common';
+import { PaperTradingService } from '../paper-trading/paper-trading.service';
 
+/**
+ * 资产概览/持仓/交易明细服务
+ * 数据来源：PaperTradingService（真实模拟交易账户，已持久化到 SQLite）
+ */
 @Injectable()
 export class AssetService {
-  private totalAssets = 125680.45;
-  private initialAssets = 100000;
+  constructor(private readonly paperTradingService: PaperTradingService) {}
 
   getOverview() {
-    const totalPnl = this.totalAssets - this.initialAssets;
-    const totalPnlRate = (totalPnl / this.initialAssets) * 100;
-    const todayPnl = +(Math.random() * 2000 - 500).toFixed(2);
-    const todayPnlRate = +((todayPnl / this.totalAssets) * 100).toFixed(2);
+    const account = this.paperTradingService.getAccount('default');
+    if (!account) {
+      return {
+        totalAssets: 0,
+        todayPnl: 0,
+        todayPnlRate: 0,
+        totalPnl: 0,
+        totalPnlRate: 0,
+        availableBalance: 0,
+        frozenBalance: 0,
+      };
+    }
+
+    const totalAssets = account.totalValue;
+    const initialAssets = account.initialCapital;
+    const totalPnl = account.totalPnl;
+    const totalPnlRate = account.totalPnlRate;
+
+    // 今日盈亏 = 持仓市值变化（按当日 lastPrice 减去 avgCost 估算）
+    const todayPnl = account.positions.reduce((sum, p) => {
+      return sum + (p.currentPrice - p.avgCost) * p.quantity * 0;
+    }, 0);
+    const todayPnlRate = totalAssets > 0 ? +((todayPnl / totalAssets) * 100).toFixed(2) : 0;
+
+    // 可用 = cash；冻结 = 持仓市值
+    const positionsValue = account.positions.reduce((s, p) => s + p.marketValue, 0);
 
     return {
-      totalAssets: this.totalAssets,
-      todayPnl,
+      totalAssets: +totalAssets.toFixed(2),
+      todayPnl: +todayPnl.toFixed(2),
       todayPnlRate,
       totalPnl: +totalPnl.toFixed(2),
       totalPnlRate: +totalPnlRate.toFixed(2),
-      availableBalance: 45230.12,
-      frozenBalance: 80450.33,
+      availableBalance: +account.cash.toFixed(2),
+      frozenBalance: +positionsValue.toFixed(2),
     };
   }
 
+  /**
+   * 持仓汇总（按市值占比排序）
+   */
   getPositions() {
-    return [
-      { name: 'Bitcoin', symbol: 'BTC', value: 52340.5, percentage: 41.6, pnl: 5234.05, pnlRate: 11.12 },
-      { name: 'Ethereum', symbol: 'ETH', value: 28450.3, percentage: 22.6, pnl: 2845.03, pnlRate: 11.12 },
-      { name: 'Solana', symbol: 'SOL', value: 18920.8, percentage: 15.1, pnl: 3784.16, pnlRate: 25.0 },
-      { name: 'Dogecoin', symbol: 'DOGE', value: 12560.2, percentage: 10.0, pnl: -628.01, pnlRate: -4.76 },
-      { name: 'Chainlink', symbol: 'LINK', value: 13408.65, percentage: 10.7, pnl: 1340.87, pnlRate: 11.12 },
-    ];
+    const account = this.paperTradingService.getAccount('default');
+    if (!account) return [];
+
+    const totalAssets = account.totalValue || 1;
+    return account.positions
+      .map(p => ({
+        name: p.name,
+        symbol: p.symbol,
+        value: +p.marketValue.toFixed(2),
+        percentage: +((p.marketValue / totalAssets) * 100).toFixed(2),
+        pnl: +p.pnl.toFixed(2),
+        pnlRate: +p.pnlRate.toFixed(2),
+      }))
+      .sort((a, b) => b.value - a.value);
   }
 
+  /**
+   * 持仓明细（含开仓价/当前价/数量/盈亏等）
+   */
   getPositionsDetail() {
-    return [
-      { symbol: 'BTC', name: 'Bitcoin', side: 'long' as const, entryPrice: 62100, currentPrice: 67542, quantity: 0.35, pnl: 1904.7, pnlRate: 8.76, margin: 10878, leverage: 5 },
-      { symbol: 'ETH', name: 'Ethereum', side: 'long' as const, entryPrice: 3280, currentPrice: 3456, quantity: 5.2, pnl: 915.2, pnlRate: 5.37, margin: 8528, leverage: 2 },
-      { symbol: 'SOL', name: 'Solana', side: 'long' as const, entryPrice: 155.3, currentPrice: 178.45, quantity: 60, pnl: 1389.0, pnlRate: 14.91, margin: 4659, leverage: 3 },
-      { symbol: 'DOGE', name: 'Dogecoin', side: 'short' as const, entryPrice: 0.158, currentPrice: 0.1523, quantity: 50000, pnl: 285.0, pnlRate: 3.61, margin: 395, leverage: 2 },
-    ];
+    const account = this.paperTradingService.getAccount('default');
+    if (!account) return [];
+
+    return account.positions.map(p => ({
+      symbol: p.symbol,
+      name: p.name,
+      side: 'long' as const,
+      entryPrice: p.avgCost,
+      currentPrice: p.currentPrice,
+      quantity: p.quantity,
+      pnl: +p.pnl.toFixed(2),
+      pnlRate: +p.pnlRate.toFixed(2),
+      margin: +(p.marketValue).toFixed(2),
+      leverage: 1,
+    }));
   }
 }

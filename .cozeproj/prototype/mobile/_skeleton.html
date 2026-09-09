@@ -5,9 +5,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- 字体（按需，系统字体时省略；只能用 Google 字体，CSS 地址前缀：https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google） -->
-  <!-- <link href="https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google/google-all-fonts.css" rel="stylesheet"/> -->
-
   <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/jquery/jquery-3.7.1.min.js"></script>
   <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/lucide/lucide-1.11.0.min.js"></script>
   <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/tailwindcss/tailwindcss-browser-4.2.4.min.js"></script>
@@ -15,32 +12,39 @@
   <style type="text/tailwindcss">
     @theme {
       /* === 品牌色 === */
-            --color-primary:              #10b981;
-      --color-primary-container:    #064e3b;
+      --color-primary:              #10b981; /* emerald-500 */
+      --color-primary-container:    #064e3b; /* emerald-900 */
       --color-on-primary:           #ffffff;
-      --color-background:                 #0f172a;
-      --color-surface-container-lowest:   #0b1220;
-      --color-surface:                    #1e293b;
-      --color-surface-container:          #24334a;
-      --color-surface-container-high:     #2c3d57;
-      --color-surface-container-highest:  #364963;
-      --color-on-surface:           #f1f5f9;
-      --color-on-surface-variant:   #94a3b8;
+      /* === 背景 / 表面（深色交易终端） === */
+      --color-background:                 #0f172a; /* slate-900 */
+      --color-surface-container-lowest:   #020617; /* slate-950 */
+      --color-surface:                    #0f172a; /* slate-900 */
+      --color-surface-container:          #1e293b; /* slate-800 */
+      --color-surface-container-high:     #334155; /* slate-700 */
+      --color-surface-container-highest:  #475569; /* slate-600 */
+      /* === 文字 === */
+      --color-on-surface:           #f1f5f9; /* slate-100 */
+      --color-on-surface-variant:   #94a3b8; /* slate-400 */
+      /* === 功能色 === */
       --color-success:  #22c55e;
       --color-error:    #ef4444;
       --color-warning:  #f59e0b;
+      /* === 边框 === */
       --color-outline:          #475569;
       --color-outline-variant:  #334155;
-      --radius-sm:   0.375rem;
-      --radius-md:   0.5rem;
-      --radius-lg:   0.75rem;
-      --radius-xl:   0.875rem;
+      /* === 圆角 === */
+      --radius-sm:   0.25rem;
+      --radius-md:   0.375rem;
+      --radius-lg:   0.5rem;
+      --radius-xl:   0.75rem;
       --radius-2xl:  1rem;
       --radius-full: 9999px;
-      --shadow-card:   0 4px 12px rgba(0,0,0,0.3);
-      --shadow-float:  0 10px 25px rgba(0,0,0,0.4);
-      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.5);
-      --font-sans: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      /* === 阴影（深色背景下用透明度更高的轻盈阴影） === */
+      --shadow-card:   0 4px 12px rgba(0,0,0,0.15);
+      --shadow-float:  0 10px 25px rgba(0,0,0,0.25);
+      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.4);
+      /* === 字体 === */
+      --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
     }
   </style>
 
@@ -49,6 +53,7 @@
       min-height: max(812px, 100dvh);
       font-family: system-ui, sans-serif;
     }
+    .tabular { font-variant-numeric: tabular-nums; }
   </style>
 
   <!-- 图片兜底 -->
@@ -82,23 +87,6 @@
   </main>
 
   <script>lucide.createIcons();</script>
-<!-- @nav:start 底部TabBar（一级页保留，二级页删除） -->
-<nav class="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-outline-variant/20
-            flex justify-around items-center h-14 pb-[env(safe-area-inset-bottom)]">
-  <a href="home.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-primary" aria-current="page">
-    <i data-lucide="home" class="w-5 h-5"></i>
-    <span class="text-[10px] font-bold tracking-wide">首页</span>
-  </a>
-  <a href="backtest.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant hover:text-on-surface transition-colors">
-    <i data-lucide="line-chart" class="w-5 h-5"></i>
-    <span class="text-[10px] font-bold tracking-wide">回测</span>
-  </a>
-  <a href="profile.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant hover:text-on-surface transition-colors">
-    <i data-lucide="user" class="w-5 h-5"></i>
-    <span class="text-[10px] font-bold tracking-wide">我的</span>
-  </a>
-</nav>
-<!-- @nav:end -->
 </body>
 
 </html>

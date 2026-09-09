@@ -9,8 +9,8 @@ import { PaperTradingService } from '../paper-trading/paper-trading.service';
 export class AssetService {
   constructor(private readonly paperTradingService: PaperTradingService) {}
 
-  getOverview() {
-    const account = this.paperTradingService.getAccount('default');
+  getOverview(accountId?: string) {
+    const account = this.paperTradingService.getAccount(accountId || 'default');
     if (!account) {
       return {
         totalAssets: 0,
@@ -51,8 +51,8 @@ export class AssetService {
   /**
    * 持仓汇总（按市值占比排序）
    */
-  getPositions() {
-    const account = this.paperTradingService.getAccount('default');
+  getPositions(accountId?: string) {
+    const account = this.paperTradingService.getAccount(accountId || 'default');
     if (!account) return [];
 
     const totalAssets = account.totalValue || 1;
@@ -71,8 +71,8 @@ export class AssetService {
   /**
    * 持仓明细（含开仓价/当前价/数量/盈亏等）
    */
-  getPositionsDetail() {
-    const account = this.paperTradingService.getAccount('default');
+  getPositionsDetail(accountId?: string) {
+    const account = this.paperTradingService.getAccount(accountId || 'default');
     if (!account) return [];
 
     return account.positions.map(p => ({

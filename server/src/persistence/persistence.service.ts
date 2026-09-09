@@ -131,7 +131,26 @@ export class PersistenceService implements OnModuleInit {
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.createTables();
+    this.migrate();
     this.logger.log(`SQLite 持久化已初始化: ${this.dbPath}`);
+  }
+
+  /**
+   * 数据库迁移：为已有表增加新列（SQLite 不支持 ADD COLUMN IF NOT EXISTS）
+   */
+  private migrate() {
+    // paper_accounts 增加 type / meta 列（v2 架构升级）
+    const accountCols = this.db.prepare("PRAGMA table_info(paper_accounts)").all() as any[];
+    const hasType = accountCols.some(c => c.name === 'type');
+    const hasMeta = accountCols.some(c => c.name === 'meta');
+    if (!hasType) {
+      this.db.exec("ALTER TABLE paper_accounts ADD COLUMN type TEXT DEFAULT 'live'");
+      this.logger.log('migrated: paper_accounts.type');
+    }
+    if (!hasMeta) {
+      this.db.exec("ALTER TABLE paper_accounts ADD COLUMN meta TEXT");
+      this.logger.log('migrated: paper_accounts.meta');
+    }
   }
 
   private createTables() {
@@ -171,6 +190,7 @@ export class PersistenceService implements OnModuleInit {
       CREATE TABLE IF NOT EXISTS paper_accounts (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        type TEXT DEFAULT 'live',
         initialCapital REAL NOT NULL,
         cash REAL NOT NULL,
         totalValue REAL NOT NULL,
@@ -179,6 +199,7 @@ export class PersistenceService implements OnModuleInit {
         isRunning INTEGER DEFAULT 0,
         startDate TEXT NOT NULL,
         strategies TEXT,
+        meta TEXT,
         createdAt TEXT,
         updatedAt TEXT
       );
@@ -291,6 +312,20 @@ export class PersistenceService implements OnModuleInit {
         createdAt TEXT,
         extra TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS history_kline (
+        symbol TEXT NOT NULL,
+        date TEXT NOT NULL,
+        open REAL NOT NULL,
+        high REAL NOT NULL,
+        low REAL NOT NULL,
+        close REAL NOT NULL,
+        volume REAL NOT NULL,
+        source TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (symbol, date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_history_kline_symbol ON history_kline(symbol);
     `);
   }
 
@@ -480,6 +515,118 @@ export class PersistenceService implements OnModuleInit {
     this.saveBetaConfig('directory_last_sync_at', ts);
   }
 
+  /** 目录统计：count + lastSyncAt 聚合 */
+  getDirectoryStats(): { count: number; lastSyncAt: string | null } {
+    const count = this.directoryCount();
+    const ts = this.getDirectoryLastSyncAt();
+    return {
+      count,
+      lastSyncAt: ts > 0 ? new Date(ts).toISOString() : null,
+    };
+  }
+
+  /** 历史K线缓存统计 */
+  getHistoryKlineRangeStats(): {
+    totalRows: number;
+    symbolCount: number;
+    oldestDate: string | null;
+    newestDate: string | null;
+  } {
+    const row = this.db
+      .prepare(
+        'SELECT COUNT(*) AS totalRows, COUNT(DISTINCT symbol) AS symbolCount, MIN(date) AS oldestDate, MAX(date) AS newestDate FROM history_kline',
+      )
+      .get() as { totalRows: number; symbolCount: number; oldestDate: string | null; newestDate: string | null };
+    return row || { totalRows: 0, symbolCount: 0, oldestDate: null, newestDate: null };
+  }
+
+  // ==================== 历史K线缓存 ====================
+  /**
+   * 读取 [start, end] 区间内的K线（按日期升序）。
+   * 用于增量补拉前先查库，已存在则不请求上游。
+   */
+  getHistoryKline(
+    symbol: string,
+    start: string,
+    end: string,
+  ): Array<{
+    symbol: string;
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    source: string;
+    updatedAt: number;
+  }> {
+    return this.db
+      .prepare(
+        'SELECT symbol, date, open, high, low, close, volume, source, updatedAt FROM history_kline WHERE symbol = ? AND date >= ? AND date <= ? ORDER BY date ASC',
+      )
+      .all(symbol, start, end) as any[];
+  }
+
+  /**
+   * 单股已缓存的日期集合（用于判断哪些日期还缺）。
+   */
+  getHistoryKlineDates(symbol: string, start: string, end: string): Set<string> {
+    const rows = this.db
+      .prepare('SELECT date FROM history_kline WHERE symbol = ? AND date >= ? AND date <= ?')
+      .all(symbol, start, end) as Array<{ date: string }>;
+    return new Set(rows.map((r) => r.date));
+  }
+
+  /**
+   * 单股历史K线缓存总数（用于 data-sources 状态探测）。
+   */
+  historyKlineCount(symbol?: string): number {
+    if (symbol) {
+      const row = this.db
+        .prepare('SELECT COUNT(*) AS c FROM history_kline WHERE symbol = ?')
+        .get(symbol) as { c: number };
+      return row.c;
+    }
+    const row = this.db.prepare('SELECT COUNT(*) AS c FROM history_kline').get() as { c: number };
+    return row.c;
+  }
+
+  /**
+   * 批量 upsert K线（同 symbol+date 唯一，更新价格/来源/updatedAt）。
+   */
+  upsertHistoryKline(
+    rows: Array<{
+      symbol: string;
+      date: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+      source: string;
+    }>,
+  ): number {
+    if (rows.length === 0) return 0;
+    const stmt = this.db.prepare(
+      `INSERT INTO history_kline (symbol, date, open, high, low, close, volume, source, updatedAt)
+       VALUES (@symbol, @date, @open, @high, @low, @close, @volume, @source, @updatedAt)
+       ON CONFLICT(symbol, date) DO UPDATE SET
+         open = excluded.open,
+         high = excluded.high,
+         low = excluded.low,
+         close = excluded.close,
+         volume = excluded.volume,
+         source = excluded.source,
+         updatedAt = excluded.updatedAt`,
+    );
+    const now = Date.now();
+    const tx = this.db.transaction((items: typeof rows) => {
+      for (const r of items) stmt.run({ ...r, updatedAt: now });
+    });
+    tx(rows);
+    return rows.length;
+  }
+
   // ==================== 关注列表（Watchlist） ====================
   saveWatch(w: { symbol: string; name: string; enabled?: boolean; createdAt?: number }): void {
     this.db
@@ -515,6 +662,7 @@ export class PersistenceService implements OnModuleInit {
   savePaperAccount(account: {
     id: string;
     name: string;
+    type?: 'live' | 'backtest';
     initialCapital: number;
     cash: number;
     totalValue: number;
@@ -523,18 +671,20 @@ export class PersistenceService implements OnModuleInit {
     isRunning: boolean;
     startDate: string;
     strategies: string[];
+    meta?: any;
   }): void {
     this.init();
     const now = new Date().toISOString();
     this.db
       .prepare(
         `INSERT OR REPLACE INTO paper_accounts
-         (id, name, initialCapital, cash, totalValue, totalPnl, totalPnlRate, isRunning, startDate, strategies, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, type, initialCapital, cash, totalValue, totalPnl, totalPnlRate, isRunning, startDate, strategies, meta, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         account.id,
         account.name,
+        account.type || 'live',
         account.initialCapital,
         account.cash,
         account.totalValue,
@@ -543,6 +693,7 @@ export class PersistenceService implements OnModuleInit {
         account.isRunning ? 1 : 0,
         account.startDate,
         JSON.stringify(account.strategies || []),
+        account.meta ? JSON.stringify(account.meta) : null,
         now,
         now,
       );
@@ -556,7 +707,34 @@ export class PersistenceService implements OnModuleInit {
       ...row,
       isRunning: row.isRunning === 1,
       strategies: JSON.parse(row.strategies || '[]'),
+      meta: row.meta ? JSON.parse(row.meta) : undefined,
     };
+  }
+
+  /**
+   * 加载所有模拟账户（按类型分组、按时倒序）
+   */
+  loadPaperAccounts(): any[] {
+    this.init();
+    return this.db
+      .prepare('SELECT * FROM paper_accounts ORDER BY type ASC, updatedAt DESC')
+      .all()
+      .map((r: any) => ({
+        ...r,
+        isRunning: r.isRunning === 1,
+        strategies: JSON.parse(r.strategies || '[]'),
+        meta: r.meta ? JSON.parse(r.meta) : undefined,
+      }));
+  }
+
+  /**
+   * 删除账户（包括持仓、交易）
+   */
+  deletePaperAccount(accountId: string): void {
+    this.init();
+    this.db.prepare('DELETE FROM paper_trades WHERE accountId = ?').run(accountId);
+    this.db.prepare('DELETE FROM paper_positions WHERE accountId = ?').run(accountId);
+    this.db.prepare('DELETE FROM paper_accounts WHERE id = ?').run(accountId);
   }
 
   savePaperPosition(accountId: string, position: {

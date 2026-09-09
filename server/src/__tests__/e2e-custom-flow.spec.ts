@@ -14,6 +14,8 @@ import { AppModule } from '@/app.module';
 // 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
 const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
 process.env.SQLITE_PATH = TEST_DB;
+// e2e 测试无外网：允许合成数据兜底
+process.env.BACKTEST_ALLOW_SYNTHETIC = 'true';
 
 describe('E2E 自定义股票/金额回测全流程', () => {
   let app: INestApplication;

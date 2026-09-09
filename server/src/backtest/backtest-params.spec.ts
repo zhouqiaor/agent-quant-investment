@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { BacktestService } from './backtest.service';
 import { StrategyService } from '../strategy/strategy.service';
 import { MarketService } from '../market/market.service';
+import { HistoryKlineService } from '../stock/history-kline.service';
 
 /**
  * 阶段2 TDD：回测自定义金额/时间段校验与收益模拟
@@ -14,6 +15,8 @@ import { MarketService } from '../market/market.service';
 // 测试数据隔离：独立 SQLite，禁止触碰生产库 data/quant.db
 const TEST_DB = `/tmp/quant-test-${process.pid}-${Date.now()}-${Math.round(Math.random() * 1e9)}.db`;
 process.env.SQLITE_PATH = TEST_DB;
+// 单元测试无外网：允许合成数据兜底
+process.env.BACKTEST_ALLOW_SYNTHETIC = 'true';
 
 describe('BacktestService - 自定义金额/时间段', () => {
   let service: BacktestService;
@@ -30,6 +33,10 @@ describe('BacktestService - 自定义金额/时间段', () => {
         BacktestService,
         { provide: StrategyService, useValue: { getStrategies: () => [] } },
         { provide: MarketService, useValue: {} },
+        {
+          provide: HistoryKlineService,
+          useValue: { fetchRealKline: async () => [], getAvailableRange: () => null },
+        },
       ],
     }).compile();
     service = moduleRef.get(BacktestService);

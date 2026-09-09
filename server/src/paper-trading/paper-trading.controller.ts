@@ -24,6 +24,58 @@ export class PaperTradingController {
     };
   }
 
+  /**
+   * 列出所有模拟账户（实盘 + 回测）
+   */
+  @Get('accounts')
+  listAccounts() {
+    const accounts = this.paperTradingService.listAccounts();
+    return {
+      code: 200,
+      msg: 'success',
+      data: accounts.map(a => ({
+        ...a,
+        totalPnl: Math.round(a.totalPnl * 100) / 100,
+        totalPnlRate: Math.round(a.totalPnlRate * 100) / 100,
+        totalValue: Math.round(a.totalValue * 100) / 100,
+      })),
+    };
+  }
+
+  /**
+   * 创建新账户（用于回测前手动指定目标账户）
+   */
+  @HttpCode(200)
+  @Post('accounts/create')
+  createAccount(@Body() body: {
+    accountId: string;
+    name?: string;
+    type?: 'live' | 'backtest';
+    initialCapital?: number;
+    meta?: any;
+  }) {
+    if (!body.accountId) {
+      return { code: 400, msg: 'accountId 必填' };
+    }
+    const account = this.paperTradingService.ensureAccount(body.accountId, {
+      name: body.name,
+      type: body.type,
+      initialCapital: body.initialCapital,
+      meta: body.meta,
+    });
+    return { code: 200, msg: 'success', data: { id: account.id, name: account.name, type: account.type } };
+  }
+
+  /**
+   * 删除账户（包括其持仓和交易）
+   */
+  @HttpCode(200)
+  @Delete('accounts/:id')
+  deleteAccount(@Param('id') id: string) {
+    this.paperTradingService.removeAccount(id);
+    return { code: 200, msg: 'success', data: { id } };
+  }
+
   @HttpCode(200)
   @Post('reset')
   resetAccount(@Body() body?: { accountId?: string; initialCapital?: number }) {

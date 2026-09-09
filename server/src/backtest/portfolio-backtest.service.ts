@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { StockService, KlineData } from '../stock/stock.service';
+import { StockService } from '../stock/stock.service';
 import { WatchlistService } from '../stock/watchlist.service';
 import { PaperTradingService, PaperTrade } from '../paper-trading/paper-trading.service';
 import { StrategyService, MonitorSignal } from '../strategy/strategy.service';
+import { HistoryKlineService, KlineData } from '../stock/history-kline.service';
 
 export interface PortfolioBacktestParams {
   initialCapital: number;
@@ -10,6 +11,17 @@ export interface PortfolioBacktestParams {
   startDate: string;        // YYYY-MM-DD
   endDate: string;          // YYYY-MM-DD
   autoTrade?: boolean;      // 默认 true
+  /**
+   * 目标账户ID：
+   * - 不传 / 传 "default"：使用默认 live 账户（回测结果直接在"我的"可见）
+   * - 传 "new"：创建新回测账户（独立运行，结果在"我的"单独显示）
+   * - 传具体账户ID：使用/创建该 ID 的回测账户
+   */
+  targetAccountId?: string;
+  /**
+   * 账户名（当 targetAccountId=new 时使用）
+   */
+  accountName?: string;
 }
 
 export interface EquityPoint {
@@ -41,6 +53,8 @@ export interface PortfolioBacktestResult {
     dateRange: { start: string; end: string };
     initialCapital: number;
     finalValue: number;
+    accountId: string; // 新增：回测产生的账户ID
+    accountType: 'live' | 'backtest'; // 新增：账户类型
   };
 }
 
@@ -61,6 +75,7 @@ export class PortfolioBacktestService {
     private readonly watchlistService: WatchlistService,
     private readonly paperTrading: PaperTradingService,
     private readonly strategyService: StrategyService,
+    private readonly historyKlineService: HistoryKlineService,
   ) {}
 
   /**
@@ -81,15 +96,57 @@ export class PortfolioBacktestService {
     // 2) 批量拉取真实历史K线
     const klineMap = await this.fetchAllKlines(symbols, startDate, endDate);
 
-    // 3) 构建交易日序列（取所有标的日期的并集）
-    const tradingDays = this.buildTradingadingDays(klineMap);
+    const tradingDays = this.buildTradingDays(klineMap);
     if (tradingDays.length === 0) {
       throw new Error('指定日期范围内无交易数据');
     }
 
-    // 4) 创建隔离账户
-    const accountId = `backtest_${Date.now()}`;
-    this.paperTrading.resetAccount(accountId, initialCapital);
+    // 4) 解析目标账户ID
+    // - 不传 → 向后兼容：每次创建新账户（避免污染默认账户）
+    // - "default" → 默认账户（不清空，保护用户数据）
+    // - "new" → 创建新回测账户
+    // - 其他 → 使用/创建该 ID 的回测账户
+    const targetInput = params.targetAccountId;
+    let accountId: string;
+    let accountType: 'live' | 'backtest';
+    let isFreshAccount = false;
+
+    if (!targetInput) {
+      // 向后兼容：保持旧行为（每次新建隔离账户）
+      accountId = `backtest_${Date.now()}`;
+      accountType = 'backtest';
+      isFreshAccount = true;
+    } else if (targetInput === 'default') {
+      accountId = 'default';
+      accountType = 'live';
+      // 不重置，保护用户已有数据
+    } else if (targetInput === 'new') {
+      accountId = `backtest_${Date.now()}`;
+      accountType = 'backtest';
+      isFreshAccount = true;
+    } else {
+      accountId = targetInput;
+      accountType = 'backtest';
+      const existing = this.paperTrading['accounts']?.get?.(accountId);
+      isFreshAccount = !existing;
+    }
+
+    // 准备账户
+    if (isFreshAccount) {
+      this.paperTrading.ensureAccount(accountId, {
+        name: params.accountName || `回测账户 ${new Date().toLocaleString('zh-CN')}`,
+        type: accountType,
+        initialCapital,
+        meta: {
+          backtestRunId: accountId,
+          startDate: tradingDays[0],
+          endDate: tradingDays[tradingDays.length - 1],
+          symbols,
+          strategyId: 'default',
+        },
+      });
+      this.paperTrading.resetAccount(accountId, initialCapital);
+    }
     this.paperTrading.startTrading(accountId);
 
     // 4.5) 为每个标的确保有策略（没有则创建临时默认策略）
@@ -147,8 +204,6 @@ export class PortfolioBacktestService {
       // 策略信号（确定性求值）
       const signals: MonitorSignal[] = this.strategyService.checkMonitorSignals(marketData);
       totalSignals += signals.length;
-
-      // 自动交易
       if (autoTrade) {
         for (const signal of signals) {
           const result = this.paperTrading.executeSignal(
@@ -205,6 +260,8 @@ export class PortfolioBacktestService {
         dateRange: { start: tradingDays[0], end: tradingDays[tradingDays.length - 1] },
         initialCapital,
         finalValue: account.totalValue,
+        accountId, // 新增：回测产生的账户ID
+        accountType, // 新增：账户类型
       },
     };
   }
@@ -219,21 +276,12 @@ export class PortfolioBacktestService {
   ): Promise<Map<string, KlineData[]>> {
     const klineMap = new Map<string, KlineData[]>();
 
-    // 计算需要的数据长度（日历日差 + 缓冲）
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const calendarDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    // 交易日约为日历日的 70%，加上 30 天缓冲
-    const datalen = Math.min(250, Math.ceil(calendarDays * 0.7) + 30);
-
-    // 并行拉取所有标的K线
+    // 并行拉取所有标的真实历史K线（与单股回测走同一通道：腾讯主源 + 新浪降级 + 缓存）
     const promises = symbols.map(async (symbol) => {
       try {
-        const klines = await this.stockService.getKlineData(symbol, 'daily', datalen);
-        // 按日期范围过滤
-        const filtered = klines.filter(k => k.date >= startDate && k.date <= endDate);
-        if (filtered.length > 0) {
-          klineMap.set(symbol, filtered);
+        const klines = await this.historyKlineService.fetchRealKline(symbol, startDate, endDate);
+        if (klines.length > 0) {
+          klineMap.set(symbol, klines);
         }
       } catch (error) {
         this.logger.warn(`Failed to fetch kline for ${symbol}: ${error.message}`);
@@ -247,7 +295,7 @@ export class PortfolioBacktestService {
   /**
    * 构建交易日序列（所有标的日期的并集，升序）
    */
-  private buildTradingadingDays(klineMap: Map<string, KlineData[]>): string[] {
+  private buildTradingDays(klineMap: Map<string, KlineData[]>): string[] {
     const dateSet = new Set<string>();
     for (const klines of klineMap.values()) {
       for (const k of klines) {

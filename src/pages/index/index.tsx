@@ -17,6 +17,8 @@ import {
   Rocket,
   Eye,
   RefreshCw,
+  CircleCheck,
+  CircleAlert,
 } from 'lucide-react-taro'
 
 interface WatchItem {
@@ -74,6 +76,7 @@ const IndexPage = () => {
   const [notifications, setNotifications] = useState<NotifyItem[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [lastTickAt, setLastTickAt] = useState<number>(0)
+  const [quoteSourceOk, setQuoteSourceOk] = useState<boolean | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const formatMoney = (val: number) => {
@@ -168,6 +171,19 @@ const IndexPage = () => {
     }
   }, [tickOnce])
 
+  // 一次性探测实时行情数据源（用于头部徽标）
+  useEffect(() => {
+    Network.request({ url: '/api/data-sources' })
+      .then((res) => {
+        const sources = res.data?.data?.data as Array<{ key: string; status: string }> | undefined
+        if (sources && Array.isArray(sources)) {
+          const quote = sources.find((s) => s.key === 'quote')
+          setQuoteSourceOk(quote ? quote.status === 'ok' : null)
+        }
+      })
+      .catch(() => setQuoteSourceOk(null))
+  }, [])
+
   const account: AccountInfo | null =
     status?.configured && status
       ? {
@@ -239,13 +255,35 @@ const IndexPage = () => {
         </View>
 
         {/* 模拟盘标识胶囊 */}
-        <View className="flex flex-row items-center justify-center mb-3">
+        <View className="flex flex-row items-center justify-center gap-2 mb-3 flex-wrap">
           <View className="flex flex-row items-center gap-2 px-3 py-1 rounded-full bg-amber-500 bg-opacity-10 border border-amber-500 border-opacity-30">
             <Shield size={12} color="#fbbf24" />
             <Text className="block text-xs font-medium text-amber-400">
               模拟交易中 · 不涉及真实资金
             </Text>
           </View>
+          {quoteSourceOk !== null && (
+            <View
+              className={`flex flex-row items-center gap-1 px-2 py-1 rounded-full border ${
+                quoteSourceOk
+                  ? 'bg-emerald-500 bg-opacity-10 border-emerald-500 border-opacity-30'
+                  : 'bg-red-500 bg-opacity-10 border-red-500 border-opacity-30'
+              }`}
+            >
+              {quoteSourceOk ? (
+                <CircleCheck size={10} color="#34d399" />
+              ) : (
+                <CircleAlert size={10} color="#f87171" />
+              )}
+              <Text
+                className={`block text-xs ${
+                  quoteSourceOk ? 'text-emerald-400' : 'text-red-400'
+                }`}
+              >
+                {quoteSourceOk ? '行情实时' : '行情降级'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* 资产总览 */}

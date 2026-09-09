@@ -3,11 +3,7 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>首页看盘 · AI 量化投研</title>
-
-  <!-- 字体（按需，系统字体时省略；只能用 Google 字体，CSS 地址前缀：https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google） -->
-  <!-- <link href="https://lf-code-agent.coze.cn/obj/x-ai-cn/fonts/google/google-all-fonts.css" rel="stylesheet"/> -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/jquery/jquery-3.7.1.min.js"></script>
   <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/lucide/lucide-1.11.0.min.js"></script>
@@ -15,16 +11,15 @@
 
   <style type="text/tailwindcss">
     @theme {
-      /* === 品牌色 === */
-            --color-primary:              #10b981;
+      --color-primary:              #10b981;
       --color-primary-container:    #064e3b;
       --color-on-primary:           #ffffff;
       --color-background:                 #0f172a;
-      --color-surface-container-lowest:   #0b1220;
-      --color-surface:                    #1e293b;
-      --color-surface-container:          #24334a;
-      --color-surface-container-high:     #2c3d57;
-      --color-surface-container-highest:  #364963;
+      --color-surface-container-lowest:   #020617;
+      --color-surface:                    #0f172a;
+      --color-surface-container:          #1e293b;
+      --color-surface-container-high:     #334155;
+      --color-surface-container-highest:  #475569;
       --color-on-surface:           #f1f5f9;
       --color-on-surface-variant:   #94a3b8;
       --color-success:  #22c55e;
@@ -32,16 +27,16 @@
       --color-warning:  #f59e0b;
       --color-outline:          #475569;
       --color-outline-variant:  #334155;
-      --radius-sm:   0.375rem;
-      --radius-md:   0.5rem;
-      --radius-lg:   0.75rem;
-      --radius-xl:   0.875rem;
+      --radius-sm:   0.25rem;
+      --radius-md:   0.375rem;
+      --radius-lg:   0.5rem;
+      --radius-xl:   0.75rem;
       --radius-2xl:  1rem;
       --radius-full: 9999px;
-      --shadow-card:   0 4px 12px rgba(0,0,0,0.3);
-      --shadow-float:  0 10px 25px rgba(0,0,0,0.4);
-      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.5);
-      --font-sans: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      --shadow-card:   0 4px 12px rgba(0,0,0,0.15);
+      --shadow-float:  0 10px 25px rgba(0,0,0,0.25);
+      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.4);
+      --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
     }
   </style>
 
@@ -50,361 +45,183 @@
       min-height: max(812px, 100dvh);
       font-family: system-ui, sans-serif;
     }
+    .tabular { font-variant-numeric: tabular-nums; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+    .live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
   </style>
-
-  <!-- 图片兜底 -->
-  <script>
-    document.addEventListener('error', function (e) {
-      const img = e.target;
-      if (img.tagName !== 'IMG' || img.dataset.fallback) return;
-      img.dataset.fallback = '1';
-      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const cat = img.getAttribute('data-category') || '其他';
-      const alt = img.getAttribute('alt') || '';
-      const label = esc(alt.length > 8 ? alt.slice(0, 8) + '…' : alt);
-      const icons = { '人物': '👤', '自然风景': '🏞', '动物': '🐾', '建筑城市': '🏙', '运动体育': '⚽', '交通工具': '🚗', '食物': '🍽', '服饰时尚': '👗', '商业科技': '💼', '游戏娱乐': '🎮', '艺术': '🎨', '其他': '🖼' };
-      const icon = icons[cat] || '🖼';
-      const w = img.width || 400, h = img.height || 300;
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="%23f3f4f6"/><text x="50%" y="45%" text-anchor="middle" font-size="${Math.min(w, h) * 0.18}" dominant-baseline="central">${icon}</text><text x="50%" y="68%" text-anchor="middle" font-size="${Math.min(w, h) * 0.07}" fill="%239ca3af" font-family="system-ui,sans-serif" dominant-baseline="central">${label}</text></svg>`;
-      img.src = 'data:image/svg+xml,' + svg;
-    }, true);
-  </script>
 </head>
 
 <body class="bg-background text-on-surface font-sans">
 
-  <!-- @nav:start 导航组件，不需要的页面则不要复制此段（从 @nav:start 到 @nav:end） -->
-  <!-- 主 Agent 在此处生成实际的导航 HTML 代码（header / TabBar 等） -->
-  <!-- @nav:end 导航组件，不需要的页面则不要复制此段 -->
+  <!-- 顶部 Header（一级页无返回） -->
+  <header class="bg-background sticky top-0 z-40 h-14 flex items-center justify-between px-4">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-md bg-primary/15 flex items-center justify-center">
+        <i data-lucide="line-chart" class="w-4 h-4 text-primary"></i>
+      </div>
+      <h1 class="text-base font-semibold text-on-surface">Agent 量化</h1>
+    </div>
+    <button class="w-10 h-10 flex items-center justify-center text-on-surface-variant rounded-full hover:bg-surface-container transition-colors">
+      <i data-lucide="bell" class="w-5 h-5"></i>
+    </button>
+  </header>
 
-  <main class="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
-    <!-- @main-content:start -->
-    <div class="px-4 pt-5 pb-6 space-y-6">
+  <!-- @main-content:start -->
+  <main class="overflow-y-auto pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <div class="px-4 pt-2 pb-6 space-y-6">
 
-      <!-- ===== 区块1：顶部标题区 ===== -->
-      <section id="section-topbar" class="flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <h1 class="text-xl font-bold text-on-surface">AI 量化投研</h1>
-          <p class="text-xs text-on-surface-variant mt-1">量化策略 · 模拟盘监控中</p>
-        </div>
-        <!-- 实时行情来源徽标（数据来源透明化：plan.md）——绿点脉冲动画 -->
-        <span id="badge-realtime"
-              class="shrink-0 inline-flex items-center gap-1.5 bg-primary-container text-primary rounded-full px-2.5 py-1 text-[10px] font-medium">
-          <span class="relative flex h-2 w-2 shrink-0">
-            <span class="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 animate-ping"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-          </span>
-          实时行情·新浪财经
-        </span>
-      </section>
-
-      <!-- ===== 区块2：模拟盘资产总览卡片 ===== -->
-      <section id="card-asset" class="bg-surface rounded-lg border border-outline-variant/20 shadow-card p-4">
-        <div class="flex items-center justify-between">
-          <!-- 模拟盘胶囊徽标 -->
-          <span class="inline-flex items-center gap-1 bg-warning/15 text-warning rounded-full px-2 py-0.5 text-[10px] font-semibold">
-            <i data-lucide="shield" class="w-3 h-3"></i>模拟盘
-          </span>
-          <!-- 6 秒自动刷新提示（新浪行情 6s 轮询） -->
-          <span id="refresh-hint" class="inline-flex items-center gap-1 text-on-surface-variant text-[10px]">
-            <i data-lucide="refresh-cw" class="w-3 h-3"></i>每 6 秒自动刷新
-          </span>
-        </div>
-        <div class="mt-3">
-          <p class="text-xs text-on-surface-variant">总资产（CNY）</p>
-          <p class="text-2xl font-bold text-on-surface mt-1 tabular-nums">¥<span id="total-assets">300,000.00</span></p>
-        </div>
-        <!-- 红涨绿跌语义：盈利/上涨 = 红色 text-error，亏损/下跌 = 绿色 text-success -->
-        <div class="grid grid-cols-2 gap-3 mt-4">
-          <div>
-            <p class="text-[10px] text-on-surface-variant">今日盈亏</p>
-            <p class="text-sm font-semibold text-error mt-1 tabular-nums">
-              <span id="today-pnl">+2,341.80</span>
-              <span id="today-pnl-pct" class="text-xs font-medium ml-1">+0.78%</span>
-            </p>
+      <!-- 模拟盘总览卡片 -->
+      <section class="bg-surface-container rounded-2xl p-5 shadow-card">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs uppercase tracking-wider text-on-surface-variant">模拟盘总资产</span>
+            <!-- ✅ 本轮新增：实时行情来源徽标 -->
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-semibold">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary live-dot"></span>
+              实时行情
+            </span>
           </div>
-          <div>
-            <p class="text-[10px] text-on-surface-variant">总收益率</p>
-            <p class="text-sm font-semibold text-error mt-1 tabular-nums">
-              <span id="total-return">+1.23%</span>
-            </p>
-          </div>
+          <span class="text-xs text-on-surface-variant tabular">14:32:08</span>
+        </div>
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="text-3xl font-bold tabular text-on-surface">¥128,346.21</span>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-success font-semibold tabular">+¥1,238.55</span>
+          <span class="text-success font-semibold tabular">+0.97%</span>
+          <span class="text-on-surface-variant text-xs">今日</span>
         </div>
       </section>
 
-      <!-- ===== 区块3：持仓列表卡片 ===== -->
-      <section id="card-positions" class="bg-surface rounded-lg border border-outline-variant/20 shadow-card p-4">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-base font-semibold text-on-surface">持仓列表</h2>
-          <span class="text-[10px] text-on-surface-variant">共 3 只</span>
-        </div>
-        <!-- 表头 -->
-        <div class="flex items-center gap-2 pb-2 border-b border-outline-variant/10 text-[10px] text-on-surface-variant">
-          <span class="flex-1 min-w-0">证券 / 持股</span>
-          <span class="w-20 text-right">现价 / 涨跌</span>
-          <span class="w-24 text-right">市值 / 盈亏</span>
-          <span class="w-3.5 shrink-0"></span>
-        </div>
-
-        <!-- 列表-持仓1：贵州茅台（红涨绿跌：上涨/浮盈 = 红色 text-error） -->
-        <a href="#" title="跳转持仓详情页" id="pos-600519" data-code="600519"
-           class="pos-row flex items-center gap-2 py-3 border-b border-outline-variant/10 hover:bg-surface-container active:bg-surface-container transition-colors">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-on-surface truncate">贵州茅台</p>
-            <p class="text-[10px] text-on-surface-variant mt-0.5">600519 · 36 股</p>
-          </div>
-          <div class="w-20 text-right">
-            <p class="text-sm font-semibold text-on-surface tabular-nums" id="price-600519">1668.50</p>
-            <span id="chg-600519"
-                  class="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] font-bold bg-error/15 text-error tabular-nums">+1.24%</span>
-          </div>
-          <div class="w-24 text-right">
-            <p class="text-sm text-on-surface tabular-nums" id="mkt-600519">60,066.00</p>
-            <p class="text-[10px] font-semibold text-error mt-0.5 tabular-nums" id="pnl-600519">+2,140.20</p>
-          </div>
-          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0"></i>
-        </a>
-
-        <!-- 列表-持仓2：章源钨业（下跌/浮亏 = 绿色 text-success） -->
-        <a href="#" title="跳转持仓详情页" id="pos-002378" data-code="002378"
-           class="pos-row flex items-center gap-2 py-3 border-b border-outline-variant/10 hover:bg-surface-container active:bg-surface-container transition-colors">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-on-surface truncate">章源钨业</p>
-            <p class="text-[10px] text-on-surface-variant mt-0.5">002378 · 4,600 股</p>
-          </div>
-          <div class="w-20 text-right">
-            <p class="text-sm font-semibold text-on-surface tabular-nums" id="price-002378">12.86</p>
-            <span id="chg-002378"
-                  class="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] font-bold bg-success/15 text-success tabular-nums">-2.35%</span>
-          </div>
-          <div class="w-24 text-right">
-            <p class="text-sm text-on-surface tabular-nums" id="mkt-002378">59,156.00</p>
-            <p class="text-[10px] font-semibold text-success mt-0.5 tabular-nums" id="pnl-002378">-3,404.00</p>
-          </div>
-          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0"></i>
-        </a>
-
-        <!-- 列表-持仓3：宁德时代（上涨/浮盈 = 红色 text-error） -->
-        <a href="#" title="跳转持仓详情页" id="pos-300750" data-code="300750"
-           class="pos-row flex items-center gap-2 py-3 hover:bg-surface-container active:bg-surface-container transition-colors">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-on-surface truncate">宁德时代</p>
-            <p class="text-[10px] text-on-surface-variant mt-0.5">300750 · 230 股</p>
-          </div>
-          <div class="w-20 text-right">
-            <p class="text-sm font-semibold text-on-surface tabular-nums" id="price-300750">258.40</p>
-            <span id="chg-300750"
-                  class="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] font-bold bg-error/15 text-error tabular-nums">+0.86%</span>
-          </div>
-          <div class="w-24 text-right">
-            <p class="text-sm text-on-surface tabular-nums" id="mkt-300750">59,432.00</p>
-            <p class="text-[10px] font-semibold text-error mt-0.5 tabular-nums" id="pnl-300750">+3,013.00</p>
-          </div>
-          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0"></i>
-        </a>
+      <!-- 快捷操作 -->
+      <section class="grid grid-cols-3 gap-3">
+        <button class="bg-surface-container rounded-xl py-4 flex flex-col items-center gap-1.5 hover:bg-surface-container-high transition-colors">
+          <i data-lucide="flask-conical" class="w-5 h-5 text-primary"></i>
+          <span class="text-xs font-medium text-on-surface">策略回测</span>
+        </button>
+        <button class="bg-surface-container rounded-xl py-4 flex flex-col items-center gap-1.5 hover:bg-surface-container-high transition-colors">
+          <i data-lucide="bot" class="w-5 h-5 text-primary"></i>
+          <span class="text-xs font-medium text-on-surface">Agent 分析</span>
+        </button>
+        <button class="bg-surface-container rounded-xl py-4 flex flex-col items-center gap-1.5 hover:bg-surface-container-high transition-colors">
+          <i data-lucide="history" class="w-5 h-5 text-primary"></i>
+          <span class="text-xs font-medium text-on-surface">交易明细</span>
+        </button>
       </section>
 
-      <!-- ===== 区块4：快捷入口网格 ===== -->
-      <section id="quick-grid" class="grid grid-cols-4 gap-3">
-        <!-- 快捷入口-1：回测中心（真实跳转） -->
-        <a href="backtest.html" id="quick-backtest"
-           class="bg-surface-container rounded-md flex flex-col items-center justify-center gap-2 py-4 hover:bg-surface-container-high active:bg-surface-container-highest transition-colors">
-          <i data-lucide="line-chart" class="w-5 h-5 text-primary"></i>
-          <span class="text-xs text-on-surface">回测中心</span>
-        </a>
-        <!-- 快捷入口-2：交易记录 -->
-        <a href="#" id="quick-trade"
-           class="bg-surface-container rounded-md flex flex-col items-center justify-center gap-2 py-4 hover:bg-surface-container-high active:bg-surface-container-highest transition-colors">
-          <i data-lucide="file-text" class="w-5 h-5 text-primary"></i>
-          <span class="text-xs text-on-surface">交易记录</span>
-        </a>
-        <!-- 快捷入口-3：添加关注 -->
-        <a href="#" id="quick-watch"
-           class="bg-surface-container rounded-md flex flex-col items-center justify-center gap-2 py-4 hover:bg-surface-container-high active:bg-surface-container-highest transition-colors">
-          <i data-lucide="plus" class="w-5 h-5 text-primary"></i>
-          <span class="text-xs text-on-surface">添加关注</span>
-        </a>
-        <!-- 快捷入口-4：策略配置 -->
-        <a href="#" id="quick-strategy"
-           class="bg-surface-container rounded-md flex flex-col items-center justify-center gap-2 py-4 hover:bg-surface-container-high active:bg-surface-container-highest transition-colors">
-          <i data-lucide="sliders-horizontal" class="w-5 h-5 text-primary"></i>
-          <span class="text-xs text-on-surface">策略配置</span>
-        </a>
+      <!-- 持仓列表 -->
+      <section>
+        <div class="flex items-center justify-between mb-3 px-1">
+          <h2 class="text-base font-semibold text-on-surface">当前持仓</h2>
+          <a href="#" class="text-xs text-on-surface-variant flex items-center gap-0.5">
+            全部 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          </a>
+        </div>
+
+        <div class="space-y-2">
+          <!-- 持仓 1 -->
+          <article class="bg-surface-container rounded-xl p-4 flex items-center justify-between">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="text-base font-semibold text-on-surface">紫光股份</h3>
+                <span class="text-xs text-on-surface-variant tabular">000938</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-on-surface-variant">持仓 1000 股</span>
+                <span class="text-on-surface-variant/50">·</span>
+                <span class="text-on-surface-variant tabular">成本 22.15</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-base font-semibold tabular text-on-surface">23.42</div>
+              <div class="text-xs font-semibold tabular text-success">+5.73%</div>
+            </div>
+          </article>
+
+          <!-- 持仓 2 -->
+          <article class="bg-surface-container rounded-xl p-4 flex items-center justify-between">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="text-base font-semibold text-on-surface">中国平安</h3>
+                <span class="text-xs text-on-surface-variant tabular">601318</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-on-surface-variant">持仓 500 股</span>
+                <span class="text-on-surface-variant/50">·</span>
+                <span class="text-on-surface-variant tabular">成本 48.30</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-base font-semibold tabular text-on-surface">46.85</div>
+              <div class="text-xs font-semibold tabular text-error">-3.00%</div>
+            </div>
+          </article>
+
+          <!-- 持仓 3 -->
+          <article class="bg-surface-container rounded-xl p-4 flex items-center justify-between">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="text-base font-semibold text-on-surface">宁德时代</h3>
+                <span class="text-xs text-on-surface-variant tabular">300750</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-on-surface-variant">持仓 200 股</span>
+                <span class="text-on-surface-variant/50">·</span>
+                <span class="text-on-surface-variant tabular">成本 195.00</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-base font-semibold tabular text-on-surface">208.50</div>
+              <div class="text-xs font-semibold tabular text-success">+6.92%</div>
+            </div>
+          </article>
+        </div>
       </section>
 
-      <!-- ===== 区块5：信号与通知 ===== -->
-      <section id="card-signals" class="bg-surface rounded-lg border border-outline-variant/20 shadow-card p-4">
-        <div class="flex items-center gap-2">
-          <i data-lucide="bell" class="w-4 h-4 text-warning"></i>
-          <h2 class="text-base font-semibold text-on-surface">信号与通知</h2>
-        </div>
-
-        <!-- 列表-信号1：贵州茅台买入信号（红涨绿跌：买入/上穿 = 红色） -->
-        <div class="flex items-center gap-3 py-3 mt-1 border-b border-outline-variant/10">
-          <div class="w-8 h-8 rounded-full bg-error/15 flex items-center justify-center shrink-0">
-            <i data-lucide="trending-up" class="w-4 h-4 text-error"></i>
+      <!-- 数据来源摘要入口 -->
+      <section>
+        <a href="profile.html" class="block bg-surface-container rounded-xl p-4 flex items-center justify-between hover:bg-surface-container-high transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
+              <i data-lucide="database" class="w-5 h-5 text-primary"></i>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-on-surface">数据来源透明化</div>
+              <div class="text-xs text-on-surface-variant mt-0.5">5 个数据源 · 全部在线</div>
+            </div>
           </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm text-on-surface truncate">贵州茅台 价格上穿 1650 触发买入</p>
-            <p class="text-[10px] text-on-surface-variant mt-0.5">今天 14:32 · 均线突破策略</p>
-          </div>
-          <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-error/15 text-error">BUY</span>
-        </div>
-
-        <!-- 列表-信号2：章源钨业止损信号（红涨绿跌：卖出/回撤 = 绿色） -->
-        <div class="flex items-center gap-3 py-3">
-          <div class="w-8 h-8 rounded-full bg-success/15 flex items-center justify-center shrink-0">
-            <i data-lucide="trending-down" class="w-4 h-4 text-success"></i>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm text-on-surface truncate">章源钨业 回撤超 5% 触发止损</p>
-            <p class="text-[10px] text-on-surface-variant mt-0.5">今天 10:05 · 回撤止损策略</p>
-          </div>
-          <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success/15 text-success">SELL</span>
-        </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-on-surface-variant"></i>
+        </a>
       </section>
 
     </div>
-    <!-- @main-content:end -->
   </main>
+  <!-- @main-content:end -->
 
-  <script>lucide.createIcons();</script>
-  <!-- @nav:start 底部TabBar（一级页保留，二级页删除） -->
-  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-outline-variant/20
-            flex justify-around items-center h-14 pb-[env(safe-area-inset-bottom)]">
-    <a href="home.html" id="nav-home" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-primary" aria-current="page">
+  <!-- 底部 TabBar（一级页专用） -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 bg-background
+              flex justify-around items-center h-14 pb-[env(safe-area-inset-bottom)] border-t border-outline-variant/30">
+    <a href="home.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-primary"
+       aria-current="page">
       <i data-lucide="home" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold tracking-wide">首页</span>
     </a>
-    <a href="backtest.html" id="nav-backtest" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant hover:text-on-surface transition-colors">
-      <i data-lucide="line-chart" class="w-5 h-5"></i>
+    <a href="backtest.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant
+                       hover:text-on-surface transition-colors">
+      <i data-lucide="flask-conical" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold tracking-wide">回测</span>
     </a>
-    <a href="profile.html" id="nav-profile" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant hover:text-on-surface transition-colors">
+    <a href="profile.html" class="flex flex-col items-center gap-0.5 px-5 py-1.5 text-on-surface-variant
+                       hover:text-on-surface transition-colors">
       <i data-lucide="user" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold tracking-wide">我的</span>
     </a>
   </nav>
-  <!-- @nav:end -->
 
-  <script>
-    /* ===== 导航辅助函数（Mobile 规范：每页必须定义） ===== */
-    function navPush(route) {
-      console.log(`[原型演示] PUSH 到: ${route}`);
-      window.location.href = route;
-    }
-    function navReplace(route) {
-      console.log(`[原型演示] REPLACE 为: ${route}`);
-      window.location.replace(route);
-    }
-    function navReset(route) {
-      console.log(`[原型演示] RESET 到: ${route}`);
-      window.location.href = route;
-    }
-    function navBack() {
-      console.log('[原型演示] BACK 返回上一页');
-      if (window.history.length > 1) window.history.back();
-    }
-
-    $(function () {
-      /* ===== TabBar 导航（Tab 间切换统一使用 navReset） ===== */
-      $('#nav-home').on('click', function (e) { e.preventDefault(); navReset('home.html'); });
-      $('#nav-backtest').on('click', function (e) { e.preventDefault(); navReset('backtest.html'); });
-      $('#nav-profile').on('click', function (e) { e.preventDefault(); navReset('profile.html'); });
-
-      /* ===== 快捷入口 ===== */
-      $('#quick-backtest').on('click', function (e) { e.preventDefault(); navReset('backtest.html'); });
-      // 交易记录 / 添加关注 / 策略配置：本轮原型页面清单（home/backtest/profile）中暂无对应页面，仅记录跳转意图
-      $('#quick-trade').on('click', function (e) {
-        e.preventDefault();
-        console.log('[原型演示] 跳转交易记录页（该页面暂未产出，后续产出后改为 navPush("trade.html")）');
-      });
-      $('#quick-watch').on('click', function (e) {
-        e.preventDefault();
-        console.log('[原型演示] 跳转添加关注页（该页面暂未产出，后续产出后改为 navPush("watchlist.html")）');
-      });
-      $('#quick-strategy').on('click', function (e) {
-        e.preventDefault();
-        console.log('[原型演示] 跳转策略配置页（该页面暂未产出，后续产出后改为 navPush("strategy.html")）');
-      });
-
-      /* ===== 持仓行 → 持仓详情页 ===== */
-      // 持仓详情页本轮未产出：点击仅记录跳转意图（title="跳转持仓详情页"）。
-      // 后续产出 position.html 后，将 console.log 替换为：
-      //   navPush(`position.html?code=${code}`);
-      $('.pos-row').on('click', function (e) {
-        e.preventDefault();
-        const code = $(this).data('code');
-        console.log(`[原型演示] PUSH 到: 持仓详情页 position.html?code=${code}`);
-      });
-
-      /* ===== 模拟 6s 行情刷新（新浪实时行情轮询）：仅微调数字，不改变涨跌符号 ===== */
-      // 红涨绿跌语义：正数（涨/盈利）= text-error 红色；负数（跌/亏损）= text-success 绿色
-      // 初始值与上方硬编码 DOM 完全一致；shares / costTotal 为固定持仓事实
-      var stocks = [
-        { code: '600519', price: 1668.50, chg: 1.24,  shares: 36,   costTotal: 57925.80 },
-        { code: '002378', price: 12.86,   chg: -2.35, shares: 4600, costTotal: 62560.00 },
-        { code: '300750', price: 258.40,  chg: 0.86,  shares: 230,  costTotal: 56419.00 }
-      ];
-      var cash = 121346.00;   // 固定现金（总资产 = 现金 + 持仓市值，初始合计 300,000.00）
-      var todayPnl = 2341.80; // 今日盈亏
-      var totalReturn = 1.23; // 总收益率
-
-      function fmt2(n) {
-        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      }
-      // 带符号数值写入 + 红/绿配色同步
-      function setSigned($el, val, decimals, suffix) {
-        const sign = val >= 0 ? '+' : '-';
-        const body = fmt2(Math.abs(val).toFixed(decimals) * 1);
-        $el.text(sign + body + (suffix || ''));
-        $el.toggleClass('text-error', val >= 0).toggleClass('text-success', val < 0);
-      }
-
-      setInterval(function () {
-        var marketTotal = 0;
-        stocks.forEach(function (s) {
-          // 现价微动 ±0.05%
-          s.price = +(s.price * (1 + (Math.random() - 0.5) * 0.001)).toFixed(2);
-          // 涨跌幅微动 ±0.03pct（幅度远小于最小持仓绝对涨幅，符号不会翻转）
-          s.chg = +(s.chg + (Math.random() - 0.5) * 0.06).toFixed(2);
-          const mkt = s.price * s.shares;
-          const pnl = mkt - s.costTotal;
-          marketTotal += mkt;
-
-          $('#price-' + s.code).text(s.price.toFixed(2));
-          $('#chg-' + s.code)
-            .text((s.chg >= 0 ? '+' : '') + s.chg.toFixed(2) + '%')
-            .toggleClass('text-error', s.chg >= 0).toggleClass('text-success', s.chg < 0)
-            .toggleClass('bg-error/15', s.chg >= 0).toggleClass('bg-success/15', s.chg < 0);
-          $('#mkt-' + s.code).text(fmt2(mkt));
-          setSigned($('#pnl-' + s.code), pnl, 2);
-        });
-
-        // 总资产 = 现金 + 持仓市值
-        const total = cash + marketTotal;
-        $('#total-assets').text(fmt2(total));
-
-        // 今日盈亏微动（±60 元内），百分比按最新总资产同步
-        todayPnl = +(todayPnl + (Math.random() - 0.5) * 120).toFixed(2);
-        const todayPct = +(todayPnl / total * 100).toFixed(2);
-        setSigned($('#today-pnl'), todayPnl, 2);
-        setSigned($('#today-pnl-pct'), todayPct, 2, '%');
-
-        // 总收益率微动 ±0.02pct
-        totalReturn = +(totalReturn + (Math.random() - 0.5) * 0.04).toFixed(2);
-        setSigned($('#total-return'), totalReturn, 2, '%');
-
-        // 刷新图标旋转一圈，强化「已刷新」反馈
-        const $icon = $('#refresh-hint svg');
-        $icon.addClass('animate-spin');
-        setTimeout(function () { $icon.removeClass('animate-spin'); }, 600);
-      }, 6000);
-
-      // 兜底渲染（含 TabBar 图标：骨架中 createIcons 位于 TabBar 之前）
-      lucide.createIcons();
-    });
-  </script>
+  <script>lucide.createIcons();</script>
 </body>
 
 </html>

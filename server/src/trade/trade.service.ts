@@ -23,8 +23,8 @@ export interface TradeRecord {
 export class TradeService {
   constructor(private readonly paperTradingService: PaperTradingService) {}
 
-  getTradeHistory(limit = 10, symbol?: string): TradeRecord[] {
-    const account = this.paperTradingService.getAccount('default');
+  getTradeHistory(limit = 10, symbol?: string, accountId?: string): TradeRecord[] {
+    const account = this.paperTradingService.getAccount(accountId || 'default');
     if (!account) return [];
 
     // 倒序（最新在前）

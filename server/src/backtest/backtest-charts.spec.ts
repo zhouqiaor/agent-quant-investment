@@ -9,6 +9,8 @@ import { AppModule } from '../app.module'
 // 测试数据隔离
 const TEST_DB = `/tmp/quant-test-backtest-chart-${process.pid}-${Date.now()}.db`
 process.env.SQLITE_PATH = TEST_DB
+// e2e 测试无外网：允许合成数据兜底
+process.env.BACKTEST_ALLOW_SYNTHETIC = 'true'
 
 describe('回测图表数据质量', () => {
   let app: INestApplication

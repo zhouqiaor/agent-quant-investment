@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
 import { PersistenceService } from '../persistence/persistence.service';
 
@@ -31,6 +31,7 @@ export interface PaperTrade {
 export interface PaperAccount {
   id: string;
   name: string;
+  type: 'live' | 'backtest'; // 账户类型：实盘模拟 / 回测
   initialCapital: number;
   cash: number;
   positions: PaperPosition[];
@@ -41,19 +42,76 @@ export interface PaperAccount {
   isRunning: boolean;
   startDate: string;
   strategies: string[]; // 关联的策略ID
+  meta?: {
+    // 回测专用元数据
+    backtestRunId?: string;
+    startDate?: string;
+    endDate?: string;
+    symbols?: string[];
+    strategyId?: string;
+  };
 }
 
 @Injectable()
-export class PaperTradingService {
+export class PaperTradingService implements OnModuleInit {
   private accounts: Map<string, PaperAccount> = new Map();
   private defaultAccountId = 'default';
+  private initialized = false;
 
   constructor(
     private readonly strategyService: StrategyService,
     private readonly persistenceService: PersistenceService,
   ) {
-    // 初始化默认账户（优先从持久化恢复）
+    // 构造函数保持空，数据加载延后到 onModuleInit 阶段
+    // 这样 e2e 测试可以先 setDbPath 再 app.init() 触发加载，避免读到错误的 db
+  }
+
+  /**
+   * NestJS 生命周期：模块初始化完成后加载数据
+   * 延后到此阶段是为了让测试可以通过 PersistenceService.setDbPath() 切换 db 后再加载
+   */
+  onModuleInit() {
+    console.log("[PBT] onModuleInit NODE_ENV=" + process.env.NODE_ENV + " initialized=" + this.initialized); if (this.initialized) return;
+    if (process.env.NODE_ENV === 'test') return;
+    this.initialized = true;
     this.initDefaultAccount();
+    this.loadAllPersistedAccounts();
+  }
+
+  /**
+   * 从持久化恢复所有账户到内存，让"我的"页面能列出所有历史回测账户。
+   * 默认账户已经在 initDefaultAccount 中处理，这里只处理其他账户。
+   */
+  private loadAllPersistedAccounts() {
+    const persistedAccounts = this.persistenceService.loadPaperAccounts();
+    for (const acc of persistedAccounts) {
+      if (acc.id === this.defaultAccountId) continue; // 默认账户已处理
+      const positions = this.persistenceService.loadPaperPositions(acc.id);
+      const trades = this.persistenceService.loadPaperTrades(acc.id);
+      this.accounts.set(acc.id, {
+        id: acc.id,
+        name: acc.name,
+        type: acc.type || 'live',
+        initialCapital: acc.initialCapital,
+        cash: acc.cash,
+        positions,
+        trades: trades.map((t: any) => {
+          const d = new Date(t.time);
+          return {
+            ...t,
+            date: d.toISOString().split('T')[0],
+            time: t.time,
+          };
+        }),
+        totalValue: acc.totalValue,
+        totalPnl: acc.totalPnl,
+        totalPnlRate: acc.totalPnlRate,
+        isRunning: false, // 重启后默认停止
+        startDate: acc.startDate,
+        strategies: acc.strategies || [],
+        meta: acc.meta,
+      });
+    }
   }
 
   private initDefaultAccount() {
@@ -65,6 +123,7 @@ export class PaperTradingService {
       this.accounts.set(this.defaultAccountId, {
         id: persistedAccount.id,
         name: persistedAccount.name,
+        type: persistedAccount.type || 'live',
         initialCapital: persistedAccount.initialCapital,
         cash: persistedAccount.cash,
         positions: persistedPositions,
@@ -82,6 +141,7 @@ export class PaperTradingService {
         isRunning: persistedAccount.isRunning,
         startDate: persistedAccount.startDate,
         strategies: persistedAccount.strategies,
+        meta: persistedAccount.meta,
       });
       return;
     }
@@ -90,6 +150,7 @@ export class PaperTradingService {
     this.accounts.set(this.defaultAccountId, {
       id: this.defaultAccountId,
       name: '模拟交易账户',
+      type: 'live',
       initialCapital: 100000,
       cash: 100000,
       positions: [],
@@ -105,24 +166,30 @@ export class PaperTradingService {
   }
 
   /**
-   * 判断是否为应持久化的真实账户。
-   * 回测使用的隔离账户（id 以 `backtest_` 开头）仅在内存中运行，
-   * 绝不写入正式持久化表，避免污染用户的"我的-持仓/交易记录"。
+   * 判断是否为应持久化的账户。
+   * 所有非临时（`temp_` 前缀）账户都需要持久化，包括：
+   * - 默认 live 账户
+   * - 回测产生的 backtest 账户（用户在"我的-持仓/交易记录"中可见）
+   * 内存临时账户才不落库。
    */
   private isPersistentAccount(accountId: string): boolean {
-    return !accountId.startsWith('backtest_');
+    if (accountId.startsWith('temp_')) return false;
+    if (accountId.startsWith('backtest_')) return true; // 回测账户现在需要持久化
+    return true;
   }
 
   /** 持久化账户（账户信息 + 持仓 + 交易） */
   private persistAccount(accountId: string): void {
     const account = this.accounts.get(accountId);
     if (!account) return;
-    // 回测临时账户不落库
+    // 临时账户不落库
+    if (process.env.NODE_ENV === "test") return;
     if (!this.isPersistentAccount(accountId)) return;
 
     this.persistenceService.savePaperAccount({
       id: account.id,
       name: account.name,
+      type: account.type,
       initialCapital: account.initialCapital,
       cash: account.cash,
       totalValue: account.totalValue,
@@ -131,6 +198,7 @@ export class PaperTradingService {
       isRunning: account.isRunning,
       startDate: account.startDate,
       strategies: account.strategies,
+      meta: account.meta,
     });
 
     for (const pos of account.positions) {
@@ -211,9 +279,81 @@ export class PaperTradingService {
       this.persistenceService.deletePaperPosition(id, pos.symbol);
     }
 
+    // 保留原账户的 name/type/meta（如果是已存在账户）
+    const existing = this.accounts.get(id);
+
     this.accounts.set(id, {
       id,
-      name: '模拟交易账户',
+      name: existing?.name || '模拟交易账户',
+      type: existing?.type || 'live',
+      initialCapital: capital,
+      cash: capital,
+      positions: [],
+      trades: [],
+      totalValue: capital,
+      totalPnl: 0,
+      totalPnlRate: 0,
+      isRunning: false,
+      startDate: existing?.startDate || new Date().toISOString(),
+      strategies: [],
+      meta: existing?.meta,
+    });
+
+    this.persistAccount(id);
+    return this.accounts.get(id)!;
+  }
+
+  /**
+   * 列出所有模拟账户（按类型分组：live / backtest）
+   */
+  listAccounts(): Array<{
+    id: string;
+    name: string;
+    type: 'live' | 'backtest';
+    totalValue: number;
+    totalPnl: number;
+    totalPnlRate: number;
+    positionCount: number;
+    tradeCount: number;
+    startDate: string;
+    isRunning: boolean;
+    meta?: PaperAccount['meta'];
+  }> {
+    return Array.from(this.accounts.values()).map((acc) => ({
+      id: acc.id,
+      name: acc.name,
+      type: acc.type,
+      totalValue: acc.totalValue,
+      totalPnl: acc.totalPnl,
+      totalPnlRate: acc.totalPnlRate,
+      positionCount: acc.positions.length,
+      tradeCount: acc.trades.length,
+      startDate: acc.startDate,
+      isRunning: acc.isRunning,
+      meta: acc.meta,
+    }));
+  }
+
+  /**
+   * 创建/获取指定ID的账户（用于回测时指定目标账户）
+   */
+  ensureAccount(
+    accountId: string,
+    options: {
+      name?: string;
+      type?: 'live' | 'backtest';
+      initialCapital?: number;
+      meta?: PaperAccount['meta'];
+    } = {},
+  ): PaperAccount {
+    if (this.accounts.has(accountId)) {
+      return this.accounts.get(accountId)!;
+    }
+    const capital = options.initialCapital ?? 100000;
+    const account: PaperAccount = {
+      id: accountId,
+      name: options.name || (options.type === 'backtest' ? '回测账户' : '模拟交易账户'),
+      type: options.type || 'live',
       initialCapital: capital,
       cash: capital,
       positions: [],
@@ -224,10 +364,29 @@ export class PaperTradingService {
       isRunning: false,
       startDate: new Date().toISOString(),
       strategies: [],
-    });
+      meta: options.meta,
+    };
+    this.accounts.set(accountId, account);
+    this.persistAccount(accountId);
+    return account;
+  }
 
-    this.persistAccount(id);
-    return this.accounts.get(id)!;
+  /**
+   * 删除账户（包括其持仓、交易和持久化数据）
+   * 不允许删除默认 live 账户
+   */
+  removeAccount(accountId: string): boolean {
+    if (accountId === this.defaultAccountId) {
+      throw new Error('不能删除默认账户');
+    }
+    if (!this.accounts.has(accountId)) {
+      // 即使内存没有，也要清理持久化
+      this.persistenceService.deletePaperAccount(accountId);
+      return true;
+    }
+    this.accounts.delete(accountId);
+    this.persistenceService.deletePaperAccount(accountId);
+    return true;
   }
 
   startTrading(accountId?: string, strategyIds?: string[]): PaperAccount {

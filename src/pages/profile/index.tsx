@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import {
+import { CircleCheck, CircleAlert, Database, ChevronRight ,
   Wallet,
   TrendingUp,
   TrendingDown,
@@ -21,6 +21,19 @@ import {
   TriangleAlert,
   RotateCcw,
 } from 'lucide-react-taro'
+
+interface DataSourceInfo {
+  key: string
+  name: string
+  description: string
+  status: 'ok' | 'degraded' | 'down'
+  detail?: string
+  count?: number
+  lastSync?: string
+}
+interface DataSourcesResponse {
+  data: DataSourceInfo[]
+}
 
 interface PositionDetail {
   symbol: string
@@ -68,11 +81,24 @@ const ProfilePage = () => {
   })
   const [notifyEnabled, setNotifyEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [dataSources, setDataSources] = useState<DataSourceInfo[]>([])
+  const [dataSourcesOpen, setDataSourcesOpen] = useState(false)
+
+  const loadDataSources = async () => {
+    try {
+      const res = await Network.request({ url: '/api/data-sources' })
+      const data: DataSourcesResponse | undefined = res.data?.data
+      if (data && Array.isArray(data.data)) setDataSources(data.data)
+    } catch (e) {
+      console.error('loadDataSources error:', e)
+    }
+  }
 
   useEffect(() => {
     loadPositions()
     loadTrades()
     loadRiskSettings()
+    loadDataSources()
   }, [])
 
   const loadPositions = async () => {
@@ -135,6 +161,87 @@ const ProfilePage = () => {
 
   return (
     <View className="flex flex-col h-full bg-slate-900">
+      {/* 数据来源卡片（点击查看详情） */}
+      <View className="px-4 pt-3">
+        <Card className="bg-slate-800 border-slate-700" onClick={() => setDataSourcesOpen(true)}>
+          <CardContent className="p-4">
+            <View className="flex flex-row items-center justify-between mb-2">
+              <View className="flex flex-row items-center gap-2">
+                <Database size={16} color="#94a3b8" />
+                <Text className="block text-sm text-slate-200 font-medium">数据来源</Text>
+              </View>
+              <ChevronRight size={16} color="#64748b" />
+            </View>
+            <View className="flex flex-row items-center gap-3 mt-2">
+              {dataSources.length === 0 ? (
+                <Text className="block text-xs text-slate-500">加载中…</Text>
+              ) : (
+                dataSources.map((src) => {
+                  const ok = src.status === 'ok'
+                  return (
+                    <View key={src.key} className="flex flex-row items-center gap-1">
+                      {ok ? (
+                        <CircleCheck size={12} color="#4ade80" />
+                      ) : (
+                        <CircleAlert size={12} color="#f87171" />
+                      )}
+                      <Text className="block text-xs text-slate-300">{src.name}</Text>
+                    </View>
+                  )
+                })
+              )}
+            </View>
+          </CardContent>
+        </Card>
+      </View>
+
+      <AlertDialog open={dataSourcesOpen} onOpenChange={setDataSourcesOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>关于数据来源</AlertDialogTitle>
+            <AlertDialogDescription>
+              本应用所有行情/股票数据来自以下三方公开接口，按优先级自动降级。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <View className="flex flex-col gap-3 my-2">
+            {dataSources.map((src) => {
+              const ok = src.status === 'ok'
+              return (
+                <View key={src.key} className="bg-slate-800 rounded-lg p-3">
+                  <View className="flex flex-row items-center justify-between mb-1">
+                    <View className="flex flex-row items-center gap-2">
+                      {ok ? (
+                        <CircleCheck size={14} color="#4ade80" />
+                      ) : (
+                        <CircleAlert size={14} color="#f87171" />
+                      )}
+                      <Text className="block text-sm font-medium text-slate-200">{src.name}</Text>
+                    </View>
+                    <Text className="block text-xs text-slate-500">
+                      {ok ? '可用' : src.status === 'degraded' ? '降级' : '不可用'}
+                    </Text>
+                  </View>
+                  <Text className="block text-xs text-slate-400 mb-1">{src.description}</Text>
+                  {src.detail && (
+                    <Text className="block text-xs text-slate-500">{src.detail}</Text>
+                  )}
+                </View>
+              )
+            })}
+            <View className="bg-slate-900 border border-slate-700 rounded-lg p-3">
+              <Text className="block text-xs text-slate-400 leading-relaxed">
+                <Text className="block text-xs text-slate-300 font-medium mb-1">免责声明</Text>
+                以上数据来自第三方公开接口，仅用于学习与技术研究，不构成任何投资建议。
+                请勿用于真实交易，使用者需自行承担风险。
+              </Text>
+            </View>
+          </View>
+          <AlertDialogFooter>
+            <AlertDialogAction>我知道了</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Tabs value={tab} onValueChange={setTab} className="flex-1">
         <View className="px-4 pt-3">
           <TabsList className="bg-slate-800">

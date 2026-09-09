@@ -58,6 +58,11 @@ export class BacktestController {
   /**
    * 全局组合回测（方案B 共享资金池账户回放）
    * 覆盖关注列表全部股票 + 各自策略 + 共享资金池，用真实历史行情回放
+   *
+   * @param body.targetAccountId:
+   *   - 不传 / "default"：使用默认 live 账户（回测结果直接在"我的-持仓/交易记录"可见）
+   *   - "new"：创建新回测账户（独立运行，结果在"我的"作为独立账户显示）
+   *   - 具体 ID：使用/创建该回测账户
    */
   @HttpCode(200)
   @Post('portfolio')
@@ -67,6 +72,8 @@ export class BacktestController {
     startDate: string;
     endDate: string;
     autoTrade?: boolean;
+    targetAccountId?: string;
+    accountName?: string;
   }) {
     const result = await this.portfolioBacktestService.runPortfolioBacktest({
       initialCapital: body.initialCapital ?? 100000,
@@ -74,6 +81,8 @@ export class BacktestController {
       startDate: body.startDate,
       endDate: body.endDate,
       autoTrade: body.autoTrade ?? true,
+      targetAccountId: body.targetAccountId,
+      accountName: body.accountName,
     });
     return {
       code: 200,

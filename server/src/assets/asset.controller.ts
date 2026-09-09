@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode } from '@nestjs/common';
+import { Controller, Get, HttpCode, Query } from '@nestjs/common';
 import { AssetService } from './asset.service';
 
 @Controller('assets')
@@ -7,31 +7,31 @@ export class AssetController {
 
   @Get('overview')
   @HttpCode(200)
-  getOverview() {
+  getOverview(@Query('accountId') accountId?: string) {
     return {
       code: 200,
       msg: 'success',
-      data: this.assetService.getOverview(),
+      data: this.assetService.getOverview(accountId),
     };
   }
 
   @Get('positions')
   @HttpCode(200)
-  getPositions() {
+  getPositions(@Query('accountId') accountId?: string) {
     return {
       code: 200,
       msg: 'success',
-      data: this.assetService.getPositions(),
+      data: this.assetService.getPositions(accountId),
     };
   }
 
   @Get('positions/detail')
   @HttpCode(200)
-  getPositionsDetail() {
+  getPositionsDetail(@Query('accountId') accountId?: string) {
     return {
       code: 200,
       msg: 'success',
-      data: this.assetService.getPositionsDetail(),
+      data: this.assetService.getPositionsDetail(accountId),
     };
   }
 }

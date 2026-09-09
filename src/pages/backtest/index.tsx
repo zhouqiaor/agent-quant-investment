@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Network } from '@/network'
-import { TrendingUp, TrendingDown, Play, Target, TriangleAlert, ChartBar, Globe } from 'lucide-react-taro'
+import { TrendingUp, TrendingDown, Play, Target, TriangleAlert, ChartBar, Globe, Database, CircleCheck, CircleAlert } from 'lucide-react-taro'
 import { LineChart } from '@/components/chart/line-chart'
 
 interface BacktestResult {
@@ -36,6 +36,14 @@ interface BacktestResult {
   trades: { date: string; type: string; price: number; quantity: number; amount: number; reason: string }[]
   strategyName: string
   indicators: string[]
+  meta?: {
+    dataSource: 'tencent' | 'sina' | 'cache' | 'mock'
+    realKline: boolean
+    actualDays: number
+    expectedDays: number
+    insufficient: boolean
+    fallbackReason?: string
+  }
 }
 
 interface PortfolioBacktestResult {
@@ -53,11 +61,13 @@ interface PortfolioBacktestResult {
   }
   meta: {
     realKline: boolean
-    dataSource: string
+    dataSource: 'tencent' | 'sina' | 'cache' | 'mock'
     symbols: string[]
     dateRange: { start: string; end: string }
     initialCapital: number
     finalValue: number
+    insufficient?: boolean
+    fallbackReason?: string
   }
 }
 
@@ -82,6 +92,7 @@ export default function BacktestPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [portfolioResult, setPortfolioResult] = useState<PortfolioBacktestResult | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // 收益曲线数据（净值基准，1.0 起）
   const equityPoints = useMemo(() => {
@@ -155,6 +166,7 @@ export default function BacktestPage() {
       return
     }
     setLoading(true)
+    setErrorMsg(null)
     try {
       const res = await Network.request({
         url: '/api/backtest/run',
@@ -171,12 +183,23 @@ export default function BacktestPage() {
       if (res.data?.data) {
         setResult(res.data.data)
         setPortfolioResult(null)
+        // 数据不足时给出额外提示
+        if (res.data.data.meta?.insufficient) {
+          Taro.showToast({
+            title: `数据不完整：${res.data.data.meta.actualDays}/${res.data.data.meta.expectedDays}天`,
+            icon: 'none',
+            duration: 2500,
+          })
+        }
       } else {
+        setErrorMsg(res.data?.message || res.data?.msg || '回测失败')
         Taro.showToast({ title: res.data?.message || res.data?.msg || '回测失败', icon: 'none' })
       }
     } catch (error: any) {
       console.error('回测失败:', error)
-      Taro.showToast({ title: error?.data?.message || error?.message || '回测失败', icon: 'none' })
+      const msg = error?.data?.message || error?.message || '回测失败'
+      setErrorMsg(msg)
+      Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
     } finally {
       setLoading(false)
     }
@@ -198,6 +221,7 @@ export default function BacktestPage() {
       return
     }
     setLoading(true)
+    setErrorMsg(null)
     try {
       const res = await Network.request({
         url: '/api/backtest/portfolio',
@@ -213,12 +237,22 @@ export default function BacktestPage() {
       if (res.data?.data) {
         setPortfolioResult(res.data.data)
         setResult(null)
+        if (res.data.data.meta?.insufficient) {
+          Taro.showToast({
+            title: `部分标的K线数据不足，已标注于结果`,
+            icon: 'none',
+            duration: 2500,
+          })
+        }
       } else {
+        setErrorMsg(res.data?.message || res.data?.msg || '回测失败')
         Taro.showToast({ title: res.data?.message || res.data?.msg || '回测失败', icon: 'none' })
       }
     } catch (error: any) {
       console.error('全局组合回测失败:', error)
-      Taro.showToast({ title: error?.data?.message || error?.message || '回测失败', icon: 'none' })
+      const msg = error?.data?.message || error?.message || '回测失败'
+      setErrorMsg(msg)
+      Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
     } finally {
       setLoading(false)
     }
@@ -362,18 +396,64 @@ export default function BacktestPage() {
           </CardContent>
         </Card>
 
+        {/* 错误提示（如 503 数据不足） */}
+        {errorMsg && (
+          <Card className="bg-red-500 bg-opacity-10 border-red-500 border-opacity-30 mb-4">
+            <CardContent className="py-3">
+              <View className="flex items-start gap-2">
+                <TriangleAlert size={14} color="#f87171" className="mt-1 flex-shrink-0" />
+                <View className="flex-1">
+                  <Text className="block text-sm text-red-400 font-medium mb-1">回测失败</Text>
+                  <Text className="block text-xs text-red-300">{errorMsg}</Text>
+                  <Text className="block text-xs text-red-400 mt-2 opacity-70">
+                    请检查股票代码是否正确，或扩大回测时间范围。
+                  </Text>
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 全局组合回测结果 */}
         {portfolioResult && (
           <>
-            {/* 数据来源标记 */}
-            <Card className="bg-emerald-500 bg-opacity-10 border-emerald-500 border-opacity-20 mb-4">
+            {/* 数据来源标记（动态：根据 meta.dataSource 区分 真实/缓存/兜底） */}
+            <Card className={`mb-4 ${
+              portfolioResult.meta.dataSource === 'mock'
+                ? 'bg-amber-500 bg-opacity-10 border-amber-500 border-opacity-30'
+                : portfolioResult.meta.dataSource === 'cache'
+                ? 'bg-blue-500 bg-opacity-10 border-blue-500 border-opacity-30'
+                : 'bg-emerald-500 bg-opacity-10 border-emerald-500 border-opacity-20'
+            }`}
+            >
               <CardContent className="py-3">
                 <View className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-emerald-500 border-opacity-30 text-emerald-400 bg-emerald-500 bg-opacity-10">
-                    <Text className="block text-xs">真实行情</Text>
-                  </Badge>
-                  <Text className="block text-xs text-emerald-400">
-                    {portfolioResult.meta.dataSource} | {portfolioResult.meta.symbols.length}只标的 | {portfolioResult.metrics.tradingDays}个交易日
+                  {portfolioResult.meta.dataSource === 'mock' ? (
+                    <Badge variant="outline" className="border-amber-500 border-opacity-40 text-amber-400 bg-amber-500 bg-opacity-10">
+                      <CircleAlert size={11} color="#fbbf24" className="mr-1" />
+                      <Text className="block text-xs">模拟数据</Text>
+                    </Badge>
+                  ) : portfolioResult.meta.dataSource === 'cache' ? (
+                    <Badge variant="outline" className="border-blue-500 border-opacity-40 text-blue-400 bg-blue-500 bg-opacity-10">
+                      <Database size={11} color="#60a5fa" className="mr-1" />
+                      <Text className="block text-xs">本地缓存</Text>
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-emerald-500 border-opacity-30 text-emerald-400 bg-emerald-500 bg-opacity-10">
+                      <CircleCheck size={11} color="#34d399" className="mr-1" />
+                      <Text className="block text-xs">真实行情</Text>
+                    </Badge>
+                  )}
+                  <Text className={`block text-xs ${
+                    portfolioResult.meta.dataSource === 'mock' ? 'text-amber-400' :
+                    portfolioResult.meta.dataSource === 'cache' ? 'text-blue-400' : 'text-emerald-400'
+                  }`}
+                  >
+                    {portfolioResult.meta.dataSource === 'tencent' ? '腾讯' :
+                     portfolioResult.meta.dataSource === 'sina' ? '新浪' :
+                     portfolioResult.meta.dataSource === 'cache' ? '本地缓存' : '合成数据'} |
+                    {' '}{portfolioResult.meta.symbols.length}只标的 | {portfolioResult.metrics.tradingDays}个交易日
+                    {portfolioResult.meta.insufficient && ' · 部分数据不足'}
                   </Text>
                 </View>
               </CardContent>
@@ -604,6 +684,50 @@ export default function BacktestPage() {
         {/* 单标的回测结果 */}
         {result && (
           <>
+            {/* 数据来源标记（动态） */}
+            <Card className={`mb-4 ${
+              result.meta?.dataSource === 'mock'
+                ? 'bg-amber-500 bg-opacity-10 border-amber-500 border-opacity-30'
+                : result.meta?.dataSource === 'cache'
+                ? 'bg-blue-500 bg-opacity-10 border-blue-500 border-opacity-30'
+                : 'bg-emerald-500 bg-opacity-10 border-emerald-500 border-opacity-20'
+            }`}
+            >
+              <CardContent className="py-3">
+                <View className="flex items-center gap-2">
+                  {result.meta?.dataSource === 'mock' ? (
+                    <Badge variant="outline" className="border-amber-500 border-opacity-40 text-amber-400 bg-amber-500 bg-opacity-10">
+                      <CircleAlert size={11} color="#fbbf24" className="mr-1" />
+                      <Text className="block text-xs">模拟数据</Text>
+                    </Badge>
+                  ) : result.meta?.dataSource === 'cache' ? (
+                    <Badge variant="outline" className="border-blue-500 border-opacity-40 text-blue-400 bg-blue-500 bg-opacity-10">
+                      <Database size={11} color="#60a5fa" className="mr-1" />
+                      <Text className="block text-xs">本地缓存</Text>
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-emerald-500 border-opacity-30 text-emerald-400 bg-emerald-500 bg-opacity-10">
+                      <CircleCheck size={11} color="#34d399" className="mr-1" />
+                      <Text className="block text-xs">真实行情</Text>
+                    </Badge>
+                  )}
+                  <Text className={`block text-xs ${
+                    result.meta?.dataSource === 'mock' ? 'text-amber-400' :
+                    result.meta?.dataSource === 'cache' ? 'text-blue-400' : 'text-emerald-400'
+                  }`}
+                  >
+                    {result.meta?.dataSource === 'tencent' ? '腾讯' :
+                     result.meta?.dataSource === 'sina' ? '新浪' :
+                     result.meta?.dataSource === 'cache' ? '本地缓存' :
+                     result.meta?.dataSource === 'mock' ? '合成数据' : '数据源'} |
+                    {' '}{result.symbol} {result.startDate}~{result.endDate} |
+                    {' '}{result.tradingDays}个交易日
+                    {result.meta?.insufficient && ' · 数据不足'}
+                  </Text>
+                </View>
+              </CardContent>
+            </Card>
+
             {/* 收益概览 */}
             <Card className="bg-slate-800 border-slate-700 mb-4">
               <CardHeader className="pb-3">

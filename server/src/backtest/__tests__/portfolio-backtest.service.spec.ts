@@ -4,6 +4,7 @@ import { StockService } from '../../stock/stock.service';
 import { WatchlistService } from '../../stock/watchlist.service';
 import { PaperTradingService } from '../../paper-trading/paper-trading.service';
 import { StrategyService } from '../../strategy/strategy.service';
+import { HistoryKlineService } from '../../stock/history-kline.service';
 import { PersistenceModule } from '../../persistence/persistence.module';
 
 describe('PortfolioBacktestService', () => {
@@ -12,6 +13,7 @@ describe('PortfolioBacktestService', () => {
   let watchlistService: jest.Mocked<WatchlistService>;
   let paperTrading: PaperTradingService;
   let strategyService: StrategyService;
+  let historyKlineService: jest.Mocked<HistoryKlineService>;
 
   beforeEach(async () => {
     const mockStockService = {
@@ -22,12 +24,17 @@ describe('PortfolioBacktestService', () => {
       listWatch: jest.fn(),
     };
 
+    const mockHistoryKlineService = {
+      fetchRealKline: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       imports: [PersistenceModule],
       providers: [
         PortfolioBacktestService,
         { provide: StockService, useValue: mockStockService },
         { provide: WatchlistService, useValue: mockWatchlistService },
+        { provide: HistoryKlineService, useValue: mockHistoryKlineService },
         PaperTradingService,
         StrategyService,
       ],
@@ -38,6 +45,7 @@ describe('PortfolioBacktestService', () => {
     watchlistService = module.get<WatchlistService>(WatchlistService) as jest.Mocked<WatchlistService>;
     paperTrading = module.get<PaperTradingService>(PaperTradingService);
     strategyService = module.get<StrategyService>(StrategyService);
+    historyKlineService = module.get<HistoryKlineService>(HistoryKlineService) as jest.Mocked<HistoryKlineService>;
   });
 
   describe('批量K线拉取', () => {
@@ -48,7 +56,7 @@ describe('PortfolioBacktestService', () => {
         { symbol: '601318', name: '中国平安', enabled: false, createdAt: 3 },
       ]);
 
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
         { date: '2024-01-03', open: 103, high: 108, low: 101, close: 106, volume: 1200 },
       ]);
@@ -60,12 +68,12 @@ describe('PortfolioBacktestService', () => {
       });
 
       // 只拉取 enabled 的 2 只
-      expect(stockService.getKlineData).toHaveBeenCalledTimes(2);
+      expect(historyKlineService.fetchRealKline).toHaveBeenCalledTimes(2);
       expect(result.meta.symbols).toEqual(['600519', '000858']);
     });
 
     it('应支持指定 symbols 参数覆盖关注列表', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
       ]);
 
@@ -76,16 +84,15 @@ describe('PortfolioBacktestService', () => {
         endDate: '2024-01-02',
       });
 
-      expect(stockService.getKlineData).toHaveBeenCalledTimes(2);
+      expect(historyKlineService.fetchRealKline).toHaveBeenCalledTimes(2);
       expect(result.meta.symbols).toEqual(['600519', '000858']);
     });
 
     it('应按日期范围过滤K线数据', async () => {
-      stockService.getKlineData.mockResolvedValue([
-        { date: '2024-01-01', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
+      // fetchRealKline 已在服务端按 startDate/endDate 过滤；mock 模拟已过滤后的结果
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 103, high: 108, low: 101, close: 106, volume: 1200 },
         { date: '2024-01-03', open: 106, high: 110, low: 104, close: 108, volume: 1100 },
-        { date: '2024-01-04', open: 108, high: 112, low: 106, close: 110, volume: 1300 },
       ]);
 
       const result = await service.runPortfolioBacktest({
@@ -102,7 +109,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('应正确计算逐日涨跌幅', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 100, volume: 1000 },
         { date: '2024-01-03', open: 100, high: 106, low: 99, close: 106, volume: 1200 }, // +6%
         { date: '2024-01-04', open: 106, high: 108, low: 98, close: 95, volume: 1100 }, // -10.38%
@@ -133,7 +140,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('缺失数据应跳过该日', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
         // 01-03 缺失
         { date: '2024-01-04', open: 106, high: 110, low: 104, close: 108, volume: 1100 },
@@ -165,7 +172,7 @@ describe('PortfolioBacktestService', () => {
 
   describe('回放引擎', () => {
     it('应创建隔离账户不污染默认账户', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
       ]);
 
@@ -185,7 +192,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('应使用共享资金池（80%资金分配）', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 100, volume: 1000 },
       ]);
 
@@ -219,7 +226,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('应记录每日净值曲线', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
         { date: '2024-01-03', open: 103, high: 108, low: 101, close: 106, volume: 1200 },
         { date: '2024-01-04', open: 106, high: 110, low: 104, close: 108, volume: 1100 },
@@ -240,7 +247,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('autoTrade=false 时不应执行交易', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 100, volume: 1000 },
       ]);
 
@@ -268,7 +275,7 @@ describe('PortfolioBacktestService', () => {
 
   describe('指标计算', () => {
     it('应正确计算总收益率', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
       ]);
 
@@ -286,7 +293,7 @@ describe('PortfolioBacktestService', () => {
 
     it('应正确计算最大回撤', async () => {
       // 模拟一个先涨后跌的场景
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 110, low: 98, close: 110, volume: 1000 },
         { date: '2024-01-03', open: 110, high: 120, low: 108, close: 120, volume: 1200 },
         { date: '2024-01-04', open: 120, high: 122, low: 90, close: 90, volume: 1100 },
@@ -315,7 +322,7 @@ describe('PortfolioBacktestService', () => {
     });
 
     it('应输出真实K线标记', async () => {
-      stockService.getKlineData.mockResolvedValue([
+      historyKlineService.fetchRealKline.mockResolvedValue([
         { date: '2024-01-02', open: 100, high: 105, low: 98, close: 103, volume: 1000 },
       ]);
 

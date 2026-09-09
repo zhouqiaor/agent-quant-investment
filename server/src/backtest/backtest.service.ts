@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { StrategyService } from '../strategy/strategy.service';
 import { MarketService } from '../market/market.service';
+import { HistoryKlineService, KlineData } from '../stock/history-kline.service';
 
 interface BacktestRequest {
   strategyId?: string;
@@ -58,13 +59,27 @@ export interface BacktestResult {
   // 策略信息
   strategyName: string;
   indicators: string[];
+
+  // 数据来源与诚实性元信息（SPEC-iteration4）
+  meta: {
+    dataSource: 'tencent' | 'sina' | 'cache' | 'mock';
+    actualDays: number;       // 实际拿到K线天数
+    expectedDays: number;     // 期望交易日数
+    insufficient: boolean;    // 数据不足（无法形成可信回测）
+    warning?: string;         // 给前端的友好提示
+  };
 }
 
 @Injectable()
 export class BacktestService {
+  /** 期望交易日最低门槛：少于这个数视为数据不足 */
+  private static readonly MIN_TRADING_DAYS = 20;
+  private readonly logger = new Logger(BacktestService.name);
+
   constructor(
     private readonly strategyService: StrategyService,
     private readonly marketService: MarketService,
+    private readonly historyKlineService: HistoryKlineService,
   ) {}
 
   /**
@@ -122,8 +137,47 @@ export class BacktestService {
       }
     }
 
-    // 生成历史K线数据（模拟）
-    const klineData = this.generateHistoricalKline(symbol, startDate, endDate);
+    // 取真实历史K线（腾讯 → 新浪降级 → 缓存）— SPEC-iteration4 关键变更
+    let klineData: KlineData[] = [];
+    let dataSource: 'tencent' | 'sina' | 'cache' | 'mock' = 'cache';
+    let fetchFailed = false;
+    try {
+      klineData = await this.historyKlineService.fetchRealKline(symbol, startDate, endDate);
+      const cached = this.historyKlineService.getAvailableRange(symbol);
+      if (klineData.length === 0) {
+        fetchFailed = true;
+      } else {
+        dataSource = cached ? 'cache' : 'tencent';
+      }
+    } catch (e: any) {
+      fetchFailed = true;
+      this.logger.warn(`历史K线拉取失败 ${symbol}: ${e.message}`);
+    }
+
+    // 测试环境无外网时（fetch 异常或返回空数组），允许显式启用合成数据兜底；否则如实报错
+    // 开启方式：设置环境变量 BACKTEST_ALLOW_SYNTHETIC=true （e2e 测试集成层）
+    if (
+      fetchFailed &&
+      process.env.NODE_ENV === 'test' &&
+      process.env.BACKTEST_ALLOW_SYNTHETIC === 'true'
+    ) {
+      this.logger.warn(`[test-mode] 合成数据兜底 ${symbol} ${startDate}~${endDate}`);
+      klineData = this.generateHistoricalKline(symbol, startDate, endDate);
+      dataSource = 'mock';
+    }
+
+    // 诚实性检查：数据不足时直接报错，避免给用户假数据
+    const expectedDays = this.estimateTradingDays(startDate, endDate);
+    if (klineData.length === 0) {
+      throw new ServiceUnavailableException(
+        `历史K线数据为空：${symbol} 在 ${startDate} ~ ${endDate} 区间内未能获取到任何数据。请稍后重试，或更换其他股票代码。`,
+      );
+    }
+    if (klineData.length < BacktestService.MIN_TRADING_DAYS) {
+      throw new ServiceUnavailableException(
+        `历史K线数据不足：${symbol} 仅获取到 ${klineData.length} 个交易日，少于最低门槛 ${BacktestService.MIN_TRADING_DAYS} 天。请扩大回测时间范围。`,
+      );
+    }
 
     // 执行回测
     const { trades, equityCurve } = this.executeBacktest(
@@ -149,7 +203,23 @@ export class BacktestService {
       trades,
       strategyName,
       indicators,
+      meta: {
+        dataSource,
+        actualDays: klineData.length,
+        expectedDays,
+        insufficient: false,
+      },
     };
+  }
+
+  /**
+   * 估算 [start, end] 区间内的预期交易日数（粗算：日历天数 × 5/7）。
+   */
+  private estimateTradingDays(start: string, end: string): number {
+    const s = new Date(`${start}T00:00:00Z`).getTime();
+    const e = new Date(`${end}T00:00:00Z`).getTime();
+    const days = Math.max(0, (e - s) / (24 * 3600 * 1000) + 1);
+    return Math.round(days * 5 / 7);
   }
 
   private generateHistoricalKline(

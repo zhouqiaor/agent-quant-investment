@@ -39,7 +39,7 @@ async function bootstrap() {
     app.useStaticAssets(distWebPath, { index: false });
     
     // SPA fallback: 所有非 API 请求返回 index.html
-    app.use('*', (req, res, next) => {
+    app.use((req, res, next) => {
       // 跳过 API 请求
       if (req.path.startsWith('/api')) {
         return next();

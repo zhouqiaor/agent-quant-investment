@@ -774,6 +774,7 @@ export class PaperTradingService implements OnModuleInit {
     }
 
     // 5) 写回
+    const oldCash = account.cash; // 记录旧值用于变更描述（line 778 后 account.cash 会被覆盖）
     account.positions = newPositions;
     account.cash = newCash;
     this.updateAccountTotal(account);
@@ -789,7 +790,7 @@ export class PaperTradingService implements OnModuleInit {
       changes.push(`positions 重建：${newPositions.length} 条`);
     }
     if (cashChanged) {
-      changes.push(`cash 调整：${account.cash}（原 ${account.cash + (totalBuy - totalSell)}）`);
+      changes.push(`cash 调整：${newCash}（原 ${oldCash}）`);
     }
     return { fixed: true, changes };
   }

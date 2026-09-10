@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PaperTradingService } from '../paper-trading/paper-trading.service';
 import { StrategyService, MonitorSignal } from '../strategy/strategy.service';
 import { NotificationService } from '../notification/notification.service';
 import { WatchlistService } from '../stock/watchlist.service';
 import { BetaConfigService } from './beta-config.service';
+import { MarketPollingService } from '../market/market-polling.service';
 
 export interface TickStats {
   marked: number;
@@ -14,6 +15,9 @@ export interface TickStats {
 export interface LiveStatus {
   lastTickAt: number;
   watchedEnabled: number;
+  tickCount: number;
+  signalsTotal: number;
+  executedTotal: number;
 }
 
 export interface MarketTick {
@@ -32,12 +36,16 @@ export interface MarketTick {
  * - 同 symbol+type+price 信号 60s 内防抖，避免重复成交
  */
 @Injectable()
-export class LivePnlService {
+export class LivePnlService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LivePnlService.name);
   private lastTickAt = 0;
   /** 防抖表：`${symbol}:${type}:${price}` → 时间戳 */
   private recentSignals = new Map<string, number>();
   private static DEBOUNCE_MS = 60_000;
+  private unsubscribeMarket: (() => void) | null = null;
+  private tickCount = 0;
+  private signalsTotal = 0;
+  private executedTotal = 0;
 
   constructor(
     private readonly paperTrading: PaperTradingService,
@@ -45,7 +53,50 @@ export class LivePnlService {
     private readonly notificationService: NotificationService,
     private readonly watchlistService: WatchlistService,
     private readonly betaConfigService: BetaConfigService,
+    private readonly marketPolling?: MarketPollingService,
   ) {}
+
+  /**
+   * 自动订阅行情轮询：每个 tick 把真实价格喂给 onTick → 持仓重估 + 信号 + 模拟下单
+   * 注意：MarketPollingService 是可选依赖（测试可省略），避免破坏现有 16 个单元测试
+   */
+  onModuleInit(): void {
+    if (!this.marketPolling) {
+      this.logger.log('MarketPollingService 未注入，跳过自动订阅（仅手动 tick 模式）');
+      return;
+    }
+    this.unsubscribeMarket = this.marketPolling.subscribe((raw) => {
+      const items = Array.isArray(raw) ? raw : [];
+      const ticks: MarketTick[] = items
+        .map((it: any) => ({
+          symbol: String(it.symbol ?? ''),
+          price: typeof it.price === 'number' ? it.price : 0,
+          changePercent: typeof it.changePercent === 'number' ? it.changePercent : 0,
+        }))
+        .filter((t) => /^[036][0-9]{5}$/.test(t.symbol) && t.price > 0);
+      if (ticks.length === 0) return;
+      void this.onTick(ticks).then((stats) => {
+        if (stats.marked > 0 || stats.signals > 0 || stats.executed > 0) {
+          this.tickCount += 1;
+          this.signalsTotal += stats.signals;
+          this.executedTotal += stats.executed;
+          this.logger.log(
+            `[实时轮询] 标=${ticks.length} 重估=${stats.marked} 信号=${stats.signals} 自动成交=${stats.executed}`,
+          );
+        }
+      }).catch((err) => {
+        this.logger.error('实时轮询处理失败', err as Error);
+      });
+    });
+    this.logger.log('已订阅 MarketPollingService 实时行情');
+  }
+
+  onModuleDestroy(): void {
+    if (this.unsubscribeMarket) {
+      this.unsubscribeMarket();
+      this.unsubscribeMarket = null;
+    }
+  }
 
   async onTick(marketData: MarketTick[]): Promise<TickStats> {
     const stats: TickStats = { marked: 0, signals: 0, executed: 0 };
@@ -116,6 +167,9 @@ export class LivePnlService {
     return {
       lastTickAt: this.lastTickAt,
       watchedEnabled: this.watchlistService.listWatch().filter((w) => w.enabled).length,
+      tickCount: this.tickCount,
+      signalsTotal: this.signalsTotal,
+      executedTotal: this.executedTotal,
     };
   }
 
@@ -133,7 +187,7 @@ export class LivePnlService {
   private persistenceHeartbeat(stats: TickStats): void {
     try {
       this.strategyService.getMonitorSignals(1); // 轻触策略引擎保持状态活跃
-      this.logger.debug(`tick: marked=${stats.marked} signals=${stats.signals} executed=${stats.executed}`);
+      this.logger.log(`tick: marked=${stats.marked} signals=${stats.signals} executed=${stats.executed}`);
     } catch (e) {
       /* ignore */
     }

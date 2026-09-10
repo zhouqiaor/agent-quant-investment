@@ -4,12 +4,13 @@ import { StrategyModule } from '../strategy/strategy.module';
 import { PaperTradingModule } from '../paper-trading/paper-trading.module';
 import { NotificationModule } from '../notification/notification.module';
 import { StockModule } from '../stock/stock.module';
+import { MarketModule } from '../market/market.module';
 import { BetaConfigService } from './beta-config.service';
 import { LivePnlService } from './live-pnl.service';
 import { BetaController } from './beta.controller';
 
 @Module({
-  imports: [PersistenceModule, StrategyModule, PaperTradingModule, NotificationModule, StockModule],
+  imports: [PersistenceModule, StrategyModule, PaperTradingModule, NotificationModule, StockModule, MarketModule],
   controllers: [BetaController],
   providers: [BetaConfigService, LivePnlService],
   exports: [BetaConfigService, LivePnlService],

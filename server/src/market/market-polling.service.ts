@@ -9,12 +9,21 @@ export class MarketPollingService implements OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private polling = false;
   private intervalMs = 5000;
+  private lastTickAt: number | null = null;
   private listeners: Listener[] = [];
 
   constructor(private readonly marketService: MarketService) {}
 
   isPolling(): boolean {
     return this.polling;
+  }
+
+  getIntervalMs(): number {
+    return this.intervalMs;
+  }
+
+  getLastTickAt(): number | null {
+    return this.lastTickAt;
   }
 
   subscribe(listener: Listener): () => void {
@@ -25,6 +34,7 @@ export class MarketPollingService implements OnModuleDestroy {
   }
 
   private notify(data: unknown[]) {
+    this.lastTickAt = Date.now();
     this.listeners.forEach((l) => {
       try {
         l(data);

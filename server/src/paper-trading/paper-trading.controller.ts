@@ -25,6 +25,21 @@ export class PaperTradingController {
   }
 
   /**
+   * 一致性对账：重建指定账户的 positions（按 trades 历史）
+   * 用于修复"交易记录跟持仓不匹配"等历史脏数据问题
+   */
+  @Post('reconcile')
+  @HttpCode(200)
+  reconcile(@Query('accountId') accountId?: string) {
+    const result = this.paperTradingService.reconcilePositionsForAccount(accountId);
+    return {
+      code: 200,
+      msg: result.fixed ? '已对账' : '无需对账（数据已一致）',
+      data: result,
+    };
+  }
+
+  /**
    * 列出所有模拟账户（实盘 + 回测）
    */
   @Get('accounts')

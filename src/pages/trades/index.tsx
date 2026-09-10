@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, ScrollView } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { Network } from '@/network'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { ArrowUpRight, ArrowDownLeft, ChartBar, ListFilter } from 'lucide-react-taro'
+import { ArrowUpRight, ArrowDownLeft, ChartBar, ListFilter, Triangle, RotateCcw } from 'lucide-react-taro'
 
 interface TradeItem {
   id: string
@@ -39,28 +41,70 @@ export default function TradesPage() {
   const [trades, setTrades] = useState<TradeItem[]>([])
   const [summary, setSummary] = useState<TradeSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const accountId = 'default' // 当前仅支持默认实盘账户
+  const [accountCash, setAccountCash] = useState<number>(0)
+  const [reconciling, setReconciling] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [tradeRes, sumRes] = await Promise.all([
+      const [tradeRes, sumRes, accRes] = await Promise.all([
         Network.request({
           url: activeFilter === 'all' ? '/api/paper-trading/trades' : `/api/paper-trading/trades?type=${activeFilter}`,
         }),
         Network.request({ url: '/api/paper-trading/summary' }),
+        Network.request({ url: `/api/paper-trading/account?accountId=${accountId}` }),
       ])
-      setTrades(Array.isArray(tradeRes.data?.data?.list) ? tradeRes.data.data.list : [])
+      const tradeData = Array.isArray(tradeRes.data?.data?.list) ? tradeRes.data.data.list : []
+      setTrades(tradeData)
       setSummary(sumRes.data?.data ?? null)
+      setAccountCash(accRes.data?.data?.cash ?? 0)
     } catch (e) {
       console.error('[trades] load error', e)
     } finally {
       setLoading(false)
     }
-  }, [activeFilter])
+  }, [activeFilter, accountId])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  /**
+   * 检测"交易记录跟持仓不匹配"
+   * 规则：账户现金为负 + 存在买入记录 → 历史脏数据（买入未扣款但 trade 已写入）
+   */
+  const isInconsistent = !!summary && accountCash < 0 && summary.buyCount > 0
+
+  const handleReconcile = useCallback(async () => {
+    Taro.showModal({
+      title: '数据对账',
+      content: '将根据交易记录自动重建持仓，可能调整现金和持仓。是否继续？',
+      confirmText: '开始对账',
+      cancelText: '取消',
+    }).then(async (res) => {
+      if (!res.confirm) return
+      setReconciling(true)
+      try {
+        const result = await Network.request({
+          url: `/api/paper-trading/reconcile?accountId=${accountId}`,
+          method: 'POST',
+        })
+        const r = result.data?.data
+        if (r?.fixed) {
+          Taro.showToast({ title: `已对账：${r.changes.join(' / ')}`, icon: 'success', duration: 3000 })
+          await loadData()
+        } else {
+          Taro.showToast({ title: '数据已一致，无需对账', icon: 'success' })
+        }
+      } catch (e) {
+        console.error('[trades] reconcile error', e)
+        Taro.showToast({ title: '对账失败', icon: 'none' })
+      } finally {
+        setReconciling(false)
+      }
+    })
+  }, [accountId, loadData])
 
   const fmtMoney = (n: number) => (n >= 0 ? '' : '-') + '¥' + Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtTime = (ts: number) => {
@@ -78,6 +122,31 @@ export default function TradesPage() {
         refresherTriggered={loading}
         onRefresherRefresh={loadData}
       >
+        {/* 数据不一致警告 */}
+        {isInconsistent && (
+          <Card className="bg-amber-500 bg-opacity-10 border-amber-500 border-opacity-40 rounded-xl mb-4">
+            <CardContent className="p-4">
+              <View className="flex flex-row items-start gap-2 mb-2">
+                <Triangle size={18} color="#fbbf24" />
+                <View className="flex-1">
+                  <Text className="block text-sm font-semibold text-amber-400">检测到交易记录与持仓不一致</Text>
+                  <Text className="block text-xs text-slate-400 mt-2 leading-relaxed">
+                    账户现金为负（¥{accountCash.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}），但累计买入 ¥{summary?.totalBuyAmount?.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}。可能存在历史脏数据（买入未扣款但 trade 已写入），建议立即对账。
+                  </Text>
+                </View>
+              </View>
+              <Button
+                className="w-full bg-amber-500 text-slate-900 rounded-lg mt-2"
+                onClick={handleReconcile}
+                disabled={reconciling}
+              >
+                <RotateCcw size={16} color="#1e293b" />
+                <Text className="block text-sm font-semibold ml-2">{reconciling ? '对账中…' : '一键重建持仓数据'}</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 汇总卡片 */}
         {summary && (
           <Card className="bg-slate-800 border-slate-700 rounded-xl mb-4">

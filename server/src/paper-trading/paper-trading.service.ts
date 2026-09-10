@@ -693,6 +693,107 @@ export class PaperTradingService implements OnModuleInit {
     return this.getAccount(accountId).positions.find((p) => p.symbol === symbol) ?? null;
   }
 
+  /**
+   * 数据一致性对账（reconcile）
+   *
+   * 背景：用户报告"交易记录跟持仓不匹配"。
+   * 历史脏数据：trades 表里有 BUY 记录，但 positions=[], cash=initialCapital（未扣）。
+   *
+   * 算法：
+   * 1) 从持久化加载该账户的所有 trades，按 time 正序排列
+   * 2) 按 symbol 分组，对每组做 FIFO + 加权平均：BUY 增加 quantity 和 cost，SELL 减少 quantity
+   * 3) 重算 avgCost = 剩余 cost / 剩余 quantity（SELL 不影响剩余持仓的 avgCost）
+   * 4) 重建 positions 数组
+   * 5) 调整 cash：cash = initialCapital + sum(SELL.amount) - sum(BUY.amount)
+   * 6) 持久化账户 + 全量替换持仓
+   *
+   * @returns { fixed: boolean, changes: string[] } 是否有改动、变更描述
+   */
+  reconcilePositionsForAccount(accountId?: string): { fixed: boolean; changes: string[] } {
+    const id = accountId || this.defaultAccountId;
+    const account = this.getAccount(id);
+    const persistedTrades = this.persistenceService
+      .loadPaperTrades(id)
+      .slice()
+      .reverse(); // loadPaperTrades 返回 DESC，对账需按时间正序
+
+    if (persistedTrades.length === 0) {
+      return { fixed: false, changes: [] };
+    }
+
+    // 1) 按 symbol 聚合
+    const groups: Record<string, { qty: number; cost: number }> = {};
+    for (const t of persistedTrades) {
+      if (!groups[t.symbol]) groups[t.symbol] = { qty: 0, cost: 0 };
+      if (t.type === 'BUY') {
+        groups[t.symbol].qty += t.quantity;
+        groups[t.symbol].cost += t.amount;
+      } else if (t.type === 'SELL') {
+        // 按当前平均成本释放
+        const avgCost = groups[t.symbol].qty > 0 ? groups[t.symbol].cost / groups[t.symbol].qty : 0;
+        const sellQty = Math.min(t.quantity, groups[t.symbol].qty);
+        groups[t.symbol].cost -= avgCost * sellQty;
+        groups[t.symbol].qty -= sellQty;
+      }
+    }
+
+    // 2) 重建 positions（过滤 qty<=0 的）
+    const newPositions: PaperPosition[] = [];
+    for (const [symbol, g] of Object.entries(groups)) {
+      if (g.qty <= 0) continue;
+      const tradesForSymbol = persistedTrades.filter(t => t.symbol === symbol);
+      const avgCost = Math.round((g.cost / g.qty) * 100) / 100;
+      newPositions.push({
+        symbol,
+        name: tradesForSymbol[tradesForSymbol.length - 1].name,
+        quantity: g.qty,
+        avgCost,
+        currentPrice: avgCost, // 对账无实时价，先用 avgCost 占位
+        marketValue: Math.round(g.qty * avgCost * 100) / 100,
+        pnl: 0,
+        pnlRate: 0,
+        openDate: tradesForSymbol[0].time,
+      });
+    }
+
+    // 3) 重算 cash = initialCapital + sum(SELL.amount) - sum(BUY.amount)
+    let totalBuy = 0, totalSell = 0;
+    for (const t of persistedTrades) {
+      if (t.type === 'BUY') totalBuy += t.amount;
+      else if (t.type === 'SELL') totalSell += t.amount;
+    }
+    const newCash = Math.round((account.initialCapital + totalSell - totalBuy) * 100) / 100;
+
+    // 4) 比较是否真有改动
+    const oldPositionsJson = JSON.stringify(account.positions.map(p => ({ symbol: p.symbol, quantity: p.quantity, avgCost: p.avgCost })));
+    const newPositionsJson = JSON.stringify(newPositions.map(p => ({ symbol: p.symbol, quantity: p.quantity, avgCost: p.avgCost })));
+    const cashChanged = Math.abs(account.cash - newCash) > 0.01;
+    const positionsChanged = oldPositionsJson !== newPositionsJson;
+    if (!cashChanged && !positionsChanged) {
+      return { fixed: false, changes: [] };
+    }
+
+    // 5) 写回
+    account.positions = newPositions;
+    account.cash = newCash;
+    this.updateAccountTotal(account);
+
+    // 6) 持久化：先清空旧持仓再写新持仓
+    for (const oldPos of this.persistenceService.loadPaperPositions(id)) {
+      this.persistenceService.deletePaperPosition(id, oldPos.symbol);
+    }
+    this.persistAccount(id);
+
+    const changes: string[] = [];
+    if (positionsChanged) {
+      changes.push(`positions 重建：${newPositions.length} 条`);
+    }
+    if (cashChanged) {
+      changes.push(`cash 调整：${account.cash}（原 ${account.cash + (totalBuy - totalSell)}）`);
+    }
+    return { fixed: true, changes };
+  }
+
   // 手动买入
   manualBuy(
     symbol: string,

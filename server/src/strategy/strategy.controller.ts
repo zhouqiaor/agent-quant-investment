@@ -102,6 +102,34 @@ export class StrategyController {
     };
   }
 
+  // Fork strategy to new version
+  @Post('custom/:id/fork')
+  @HttpCode(200)
+  forkCustomStrategy(@Param('id') id: string, @Body() body: { name?: string; overrides?: Record<string, unknown> }) {
+    const name = body.name || `Fork of ${id}`;
+    const forked = this.strategyService.forkCustomStrategy(id, name, body.overrides || {});
+    if (!forked) {
+      return { code: 404, msg: '父策略不存在', data: null };
+    }
+    return {
+      code: 200,
+      msg: 'Fork 已创建',
+      data: forked,
+    };
+  }
+
+  // List versions of same root strategy
+  @Get('custom/:id/versions')
+  @HttpCode(200)
+  listStrategyVersions(@Param('id') id: string) {
+    const versions = this.strategyService.listStrategyVersions(id);
+    return {
+      code: 200,
+      msg: 'success',
+      data: versions,
+    };
+  }
+
   // Monitor signals
   @Get('monitor/signals')
   @HttpCode(200)

@@ -209,6 +209,57 @@ export class StrategyService {
     return true;
   }
 
+  /**
+   * Fork 现有策略为新版本（不修改原记录，返回新 id）
+   * - parentId = 原策略 id
+   * - version = 同 root 下最大 version + 1
+   * - rootId = parent.rootId（若有），否则 = parentId
+   * - 仅 overrides 指定字段覆盖，其余继承父策略
+   */
+  forkCustomStrategy(
+    parentId: string,
+    name: string,
+    overrides: Partial<CustomStrategy> = {},
+  ): (CustomStrategy & { parentId?: string; rootId?: string; version?: number; forkedAt?: number }) | null {
+    const parent = this.getCustomStrategy(parentId);
+    if (!parent) return null;
+    const siblings = this.customStrategies.filter(
+      (s) => (s as any).rootId === (parent as any).rootId || s.id === parent.id,
+    );
+    const rootId = (parent as any).rootId || parent.id;
+    const maxVersion = siblings.reduce((m, s) => Math.max(m, (s as any).version || 1), 1);
+    const id = `cs_${Date.now()}`;
+    const now = new Date().toISOString();
+    const forked: CustomStrategy = {
+      ...parent,
+      ...overrides,
+      id,
+      name,
+      pnl: 0,
+      pnlRate: 0,
+      winRate: 0,
+      trades: 0,
+      status: 'stopped',
+      createdAt: now,
+    };
+    (forked as any).parentId = parentId;
+    (forked as any).rootId = rootId;
+    (forked as any).version = maxVersion + 1;
+    (forked as any).forkedAt = Date.now();
+    this.customStrategies.push(forked);
+    return forked;
+  }
+
+  /** 列出同一 root 下的全部历史版本，按 version 升序 */
+  listStrategyVersions(rootOrId: string): CustomStrategy[] {
+    const target = this.getCustomStrategy(rootOrId);
+    if (!target) return [];
+    const rootId = (target as any).rootId || target.id;
+    return this.customStrategies
+      .filter((s) => s.id === rootId || (s as any).rootId === rootId)
+      .sort((a, b) => (((a as any).version || 1) as number) - (((b as any).version || 1) as number));
+  }
+
   getCustomStrategies(): CustomStrategy[] {
     return this.customStrategies;
   }

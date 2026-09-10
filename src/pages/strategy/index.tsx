@@ -23,6 +23,7 @@ import {
   ChartBar,
   Copy,
   Trash2,
+  GitCompare,
 } from 'lucide-react-taro'
 
 interface StrategyItem {
@@ -292,6 +293,14 @@ const StrategyPage = () => {
               >
                 <Activity size={14} color="#fbbf24" />
                 <Text className="text-xs ml-1">模拟交易</Text>
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-purple-500 bg-opacity-10 border-purple-500 border-opacity-30 text-purple-400 h-8 px-3"
+                onClick={() => Taro.navigateTo({ url: '/pages/strategy/ab-test' })}
+              >
+                <GitCompare size={14} color="#a78bfa" />
+                <Text className="text-xs ml-1">A/B 对比</Text>
               </Button>
               <Button
                 className="bg-emerald-500 bg-opacity-20 text-emerald-400 h-8 px-3"

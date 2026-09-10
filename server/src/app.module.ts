@@ -16,9 +16,10 @@ import { OptimizerModule } from '@/optimizer/optimizer.module';
 import { NotificationModule } from '@/notification/notification.module';
 import { BetaModule } from '@/beta/beta.module';
 import { DataSourceModule } from '@/data-source/data-source.module';
+import { ABTestModule } from '@/ab-test/ab-test.module';
 
 @Module({
-  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, DataSourceModule],
+  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, DataSourceModule, ABTestModule],
   controllers: [AppController],
   providers: [AppService],
 })

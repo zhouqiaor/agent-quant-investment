@@ -151,6 +151,24 @@ export class PersistenceService implements OnModuleInit {
       this.db.exec("ALTER TABLE paper_accounts ADD COLUMN meta TEXT");
       this.logger.log('migrated: paper_accounts.meta');
     }
+    // custom_strategies 增加 parentId / version / forkedAt（v3 架构升级：策略版本化）
+    const stratCols = this.db.prepare("PRAGMA table_info(custom_strategies)").all() as any[];
+    if (!stratCols.some((c) => c.name === 'parent_id')) {
+      this.db.exec('ALTER TABLE custom_strategies ADD COLUMN parent_id TEXT');
+      this.logger.log('migrated: custom_strategies.parent_id');
+    }
+    if (!stratCols.some((c) => c.name === 'version')) {
+      this.db.exec('ALTER TABLE custom_strategies ADD COLUMN version INTEGER DEFAULT 1');
+      this.logger.log('migrated: custom_strategies.version');
+    }
+    if (!stratCols.some((c) => c.name === 'forked_at')) {
+      this.db.exec('ALTER TABLE custom_strategies ADD COLUMN forked_at INTEGER');
+      this.logger.log('migrated: custom_strategies.forked_at');
+    }
+    if (!stratCols.some((c) => c.name === 'root_id')) {
+      this.db.exec('ALTER TABLE custom_strategies ADD COLUMN root_id TEXT');
+      this.logger.log('migrated: custom_strategies.root_id');
+    }
   }
 
   private createTables() {
@@ -326,14 +344,53 @@ export class PersistenceService implements OnModuleInit {
         PRIMARY KEY (symbol, date)
       );
       CREATE INDEX IF NOT EXISTS idx_history_kline_symbol ON history_kline(symbol);
+
+      CREATE TABLE IF NOT EXISTS market_ticks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        price REAL NOT NULL,
+        open REAL,
+        prev_close REAL,
+        change_percent REAL,
+        volume INTEGER,
+        recorded_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_market_ticks_symbol_time ON market_ticks(symbol, recorded_at);
+
+      CREATE TABLE IF NOT EXISTS ab_experiments (
+        id TEXT PRIMARY KEY,
+        v1_strategy_id TEXT NOT NULL,
+        v2_strategy_id TEXT NOT NULL,
+        symbols TEXT NOT NULL,
+        start_at INTEGER NOT NULL,
+        end_at INTEGER NOT NULL,
+        initial_capital REAL NOT NULL,
+        status TEXT NOT NULL,
+        v1_account_id TEXT,
+        v2_account_id TEXT,
+        summary_metrics TEXT,
+        created_at INTEGER NOT NULL,
+        finished_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_ab_exp_created ON ab_experiments(created_at);
+
+      CREATE TABLE IF NOT EXISTS ab_equity_points (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id TEXT NOT NULL,
+        side TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        equity REAL NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ab_eq_exp_side_ts ON ab_equity_points(experiment_id, side, ts);
     `);
   }
 
   // ==================== 自定义策略 ====================
-  saveCustomStrategy(strategy: CustomStrategyRecord & { id?: string }): string {
+  saveCustomStrategy(strategy: CustomStrategyRecord & { id?: string; parentId?: string; rootId?: string; version?: number; forkedAt?: number }): string {
     const id = strategy.id || `cs_${Date.now()}`;
     const now = new Date().toISOString();
     const existing = this.getCustomStrategyRaw(id);
+    const version = strategy.version ?? existing?.version ?? 1;
     const s = {
       id,
       name: strategy.name,
@@ -348,6 +405,10 @@ export class PersistenceService implements OnModuleInit {
       autoTrade: strategy.autoTrade ? 1 : 0,
       monitorEnabled: strategy.monitorEnabled ? 1 : 0,
       isRunning: strategy.isRunning ? 1 : 0,
+      parentId: strategy.parentId ?? existing?.parent_id ?? null,
+      rootId: strategy.rootId ?? existing?.root_id ?? id,
+      version,
+      forkedAt: strategy.forkedAt ?? existing?.forked_at ?? null,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     };
@@ -355,12 +416,290 @@ export class PersistenceService implements OnModuleInit {
       .prepare(
         `INSERT OR REPLACE INTO custom_strategies
          (id, name, symbol, indicators, indicatorParams, buyConditions, sellConditions,
-          positionSize, stopLoss, takeProfit, autoTrade, monitorEnabled, isRunning, createdAt, updatedAt)
+          positionSize, stopLoss, takeProfit, autoTrade, monitorEnabled, isRunning,
+          parent_id, root_id, version, forked_at, createdAt, updatedAt)
          VALUES (@id, @name, @symbol, @indicators, @indicatorParams, @buyConditions, @sellConditions,
-          @positionSize, @stopLoss, @takeProfit, @autoTrade, @monitorEnabled, @isRunning, @createdAt, @updatedAt)`,
+          @positionSize, @stopLoss, @takeProfit, @autoTrade, @monitorEnabled, @isRunning,
+          @parentId, @rootId, @version, @forkedAt, @createdAt, @updatedAt)`,
       )
       .run(s);
     return id;
+  }
+
+  /**
+   * Fork 现有策略为新版本（不修改原记录，返回新 id）
+   * - parentId = 原策略 id
+   * - rootId = 原策略 rootId（如有），否则 = parentId
+   * - version = 同 root 下最大 version + 1
+   * - 仅当 overrides 指定的字段会覆盖，其他字段继承父策略
+   */
+  forkCustomStrategy(
+    parentId: string,
+    name: string,
+    overrides: Partial<CustomStrategyRecord> = {},
+  ): (CustomStrategyRecord & { id: string; parentId: string | null; rootId: string; version: number; forkedAt: number }) | null {
+    const parent = this.getCustomStrategyRaw(parentId);
+    if (!parent) return null;
+    const rootId = parent.root_id || parent.id;
+    const maxVersionRow = this.db
+      .prepare('SELECT MAX(version) as v FROM custom_strategies WHERE root_id = ?')
+      .get(rootId) as { v: number | null };
+    const nextVersion = (maxVersionRow.v || parent.version || 1) + 1;
+    const now = Date.now();
+    const newId = `cs_${now}`;
+    const merged: any = {
+      name,
+      symbol: parent.symbol,
+      indicators: JSON.parse(parent.indicators || '[]'),
+      indicatorParams: JSON.parse(parent.indicatorParams || '{}'),
+      buyConditions: JSON.parse(parent.buyConditions || '[]'),
+      sellConditions: JSON.parse(parent.sellConditions || '[]'),
+      positionSize: parent.positionSize,
+      stopLoss: parent.stopLoss,
+      takeProfit: parent.takeProfit,
+      autoTrade: !!parent.autoTrade,
+      monitorEnabled: !!parent.monitorEnabled,
+      isRunning: 0,
+      ...overrides,
+    };
+    this.db
+      .prepare(
+        `INSERT INTO custom_strategies
+         (id, name, symbol, indicators, indicatorParams, buyConditions, sellConditions,
+          positionSize, stopLoss, takeProfit, autoTrade, monitorEnabled, isRunning,
+          parent_id, root_id, version, forked_at, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        newId,
+        merged.name,
+        merged.symbol,
+        JSON.stringify(merged.indicators),
+        JSON.stringify(merged.indicatorParams),
+        JSON.stringify(merged.buyConditions),
+        JSON.stringify(merged.sellConditions),
+        merged.positionSize,
+        merged.stopLoss,
+        merged.takeProfit,
+        merged.autoTrade ? 1 : 0,
+        merged.monitorEnabled ? 1 : 0,
+        0,
+        parentId,
+        rootId,
+        nextVersion,
+        now,
+        new Date(now).toISOString(),
+        new Date(now).toISOString(),
+      );
+    return this.getCustomStrategy(newId) as any;
+  }
+
+  /** 列出同一 root 下的全部历史版本，按 version 升序 */
+  listStrategyVersions(rootId: string): (CustomStrategyRecord & { id: string; parentId: string | null; rootId: string; version: number; forkedAt: number | null })[] {
+    // rootId 可以是 id 或 root_id，向上找祖先
+    const anchor = this.db
+      .prepare('SELECT root_id FROM custom_strategies WHERE id = ?')
+      .get(rootId) as { root_id: string | null } | undefined;
+    const actualRoot = anchor?.root_id || rootId;
+    const rows = this.db
+      .prepare('SELECT * FROM custom_strategies WHERE root_id = ? OR id = ? ORDER BY version ASC')
+      .all(actualRoot, actualRoot) as any[];
+    return rows.map((r) => this.hydrateStrategy(r) as any);
+  }
+
+  // ==================== Market Ticks（实时行情录制） ====================
+  recordTicks(
+    ticks: Array<{
+      symbol: string;
+      price: number;
+      open?: number | null;
+      prevClose?: number | null;
+      changePercent?: number | null;
+      volume?: number | null;
+      recordedAt?: number;
+    }>,
+  ): number {
+    if (ticks.length === 0) return 0;
+    const stmt = this.db.prepare(
+      `INSERT INTO market_ticks (symbol, price, open, prev_close, change_percent, volume, recorded_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    let n = 0;
+    const tx = this.db.transaction((batch: typeof ticks) => {
+      for (const t of batch) {
+        stmt.run(
+          t.symbol,
+          t.price,
+          t.open ?? null,
+          t.prevClose ?? null,
+          t.changePercent ?? null,
+          t.volume ?? null,
+          t.recordedAt ?? Date.now(),
+        );
+        n++;
+      }
+    });
+    tx(ticks);
+    return n;
+  }
+
+  queryTicks(opts: {
+    symbol?: string;
+    fromTs?: number;
+    toTs?: number;
+    limit?: number;
+  }): Array<{ symbol: string; price: number; open: number | null; prevClose: number | null; changePercent: number | null; volume: number | null; recordedAt: number }> {
+    const limit = Math.min(opts.limit ?? 500, 5000);
+    const where: string[] = [];
+    const params: any[] = [];
+    if (opts.symbol) {
+      where.push('symbol = ?');
+      params.push(opts.symbol);
+    }
+    if (opts.fromTs !== undefined) {
+      where.push('recorded_at >= ?');
+      params.push(opts.fromTs);
+    }
+    if (opts.toTs !== undefined) {
+      where.push('recorded_at <= ?');
+      params.push(opts.toTs);
+    }
+    const sql = `SELECT symbol, price, open, prev_close as prevClose, change_percent as changePercent, volume, recorded_at as recordedAt
+                 FROM market_ticks
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY recorded_at DESC
+                 LIMIT ?`;
+    params.push(limit);
+    return this.db.prepare(sql).all(...params) as any;
+  }
+
+  tickStats(): { total: number; symbols: number; earliest: number | null; latest: number | null } {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) as total, COUNT(DISTINCT symbol) as symbols, MIN(recorded_at) as earliest, MAX(recorded_at) as latest FROM market_ticks`,
+      )
+      .get() as any;
+    return {
+      total: row.total || 0,
+      symbols: row.symbols || 0,
+      earliest: row.earliest,
+      latest: row.latest,
+    };
+  }
+
+  // ==================== A/B 实验 ====================
+  saveAbExperiment(exp: {
+    id?: string;
+    v1StrategyId: string;
+    v2StrategyId: string;
+    symbols: string[];
+    startAt: number;
+    endAt: number;
+    initialCapital: number;
+    status: string;
+    v1AccountId?: string | null;
+    v2AccountId?: string | null;
+    summaryMetrics?: any;
+    createdAt?: number;
+    finishedAt?: number | null;
+  }): string {
+    const id = exp.id || `ab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO ab_experiments
+         (id, v1_strategy_id, v2_strategy_id, symbols, start_at, end_at, initial_capital,
+          status, v1_account_id, v2_account_id, summary_metrics, created_at, finished_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        exp.v1StrategyId,
+        exp.v2StrategyId,
+        JSON.stringify(exp.symbols),
+        exp.startAt,
+        exp.endAt,
+        exp.initialCapital,
+        exp.status,
+        exp.v1AccountId ?? null,
+        exp.v2AccountId ?? null,
+        exp.summaryMetrics ? JSON.stringify(exp.summaryMetrics) : null,
+        exp.createdAt ?? Date.now(),
+        exp.finishedAt ?? null,
+      );
+    return id;
+  }
+
+  getAbExperiment(id: string): any {
+    const row = this.db.prepare('SELECT * FROM ab_experiments WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return {
+      ...row,
+      symbols: JSON.parse(row.symbols || '[]'),
+      summaryMetrics: row.summary_metrics ? JSON.parse(row.summary_metrics) : null,
+      createdAt: row.created_at,
+      finishedAt: row.finished_at,
+      v1StrategyId: row.v1_strategy_id,
+      v2StrategyId: row.v2_strategy_id,
+      initialCapital: row.initial_capital,
+      v1AccountId: row.v1_account_id,
+      v2AccountId: row.v2_account_id,
+      startAt: row.start_at,
+      endAt: row.end_at,
+    };
+  }
+
+  listAbExperiments(limit = 20): any[] {
+    const rows = this.db
+      .prepare('SELECT * FROM ab_experiments ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as any[];
+    return rows.map((r) => ({
+      ...r,
+      symbols: JSON.parse(r.symbols || '[]'),
+      summaryMetrics: r.summary_metrics ? JSON.parse(r.summary_metrics) : null,
+      createdAt: r.created_at,
+      finishedAt: r.finished_at,
+      v1StrategyId: r.v1_strategy_id,
+      v2StrategyId: r.v2_strategy_id,
+      initialCapital: r.initial_capital,
+      v1AccountId: r.v1_account_id,
+      v2AccountId: r.v2_account_id,
+      startAt: r.start_at,
+      endAt: r.end_at,
+    }));
+  }
+
+  deleteAbExperiment(id: string): boolean {
+    const tx = this.db.transaction((expId: string) => {
+      this.db.prepare('DELETE FROM ab_equity_points WHERE experiment_id = ?').run(expId);
+      this.db.prepare('DELETE FROM ab_experiments WHERE id = ?').run(expId);
+    });
+    const before = this.db.prepare('SELECT id FROM ab_experiments WHERE id = ?').get(id);
+    if (!before) return false;
+    tx(id);
+    return true;
+  }
+
+  saveAbEquityPoints(points: Array<{ experimentId: string; side: 'v1' | 'v2'; ts: number; equity: number }>): number {
+    if (points.length === 0) return 0;
+    const stmt = this.db.prepare(
+      'INSERT INTO ab_equity_points (experiment_id, side, ts, equity) VALUES (?, ?, ?, ?)',
+    );
+    let n = 0;
+    const tx = this.db.transaction((batch: typeof points) => {
+      for (const p of batch) {
+        stmt.run(p.experimentId, p.side, p.ts, p.equity);
+        n++;
+      }
+    });
+    tx(points);
+    return n;
+  }
+
+  getAbEquityCurve(experimentId: string, side: 'v1' | 'v2'): Array<{ ts: number; equity: number }> {
+    const rows = this.db
+      .prepare('SELECT ts, equity FROM ab_equity_points WHERE experiment_id = ? AND side = ? ORDER BY ts ASC')
+      .all(experimentId, side) as any[];
+    return rows.map((r) => ({ ts: r.ts, equity: r.equity }));
   }
 
   // ==================== 优化结果 ====================
@@ -1023,7 +1362,7 @@ export class PersistenceService implements OnModuleInit {
     return rows.map((r) => this.hydrateStrategy(r));
   }
 
-  private hydrateStrategy(row: any): CustomStrategyRecord & { id: string } {
+  private hydrateStrategy(row: any): CustomStrategyRecord & { id: string; parentId?: string | null; rootId?: string | null; version?: number; forkedAt?: number | null } {
     return {
       id: row.id,
       name: row.name,
@@ -1038,6 +1377,10 @@ export class PersistenceService implements OnModuleInit {
       autoTrade: !!row.autoTrade,
       monitorEnabled: !!row.monitorEnabled,
       isRunning: !!row.isRunning,
+      parentId: row.parent_id || null,
+      rootId: row.root_id || row.id,
+      version: row.version || 1,
+      forkedAt: row.forked_at || null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -182,20 +182,20 @@ const MarketPage = () => {
 
       {/* Tab 切换（仅非搜索状态显示） */}
       {!searchText.trim() && (
-        <Tabs value={tab} onValueChange={setTab} className="flex-1">
-          <View className="px-4">
+        <View className="px-4 pt-2">
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="bg-slate-800">
               <TabsTrigger value="favorites">自选</TabsTrigger>
               <TabsTrigger value="all">全部</TabsTrigger>
               <TabsTrigger value="gainers">涨幅榜</TabsTrigger>
               <TabsTrigger value="losers">跌幅榜</TabsTrigger>
             </TabsList>
-          </View>
-        </Tabs>
+          </Tabs>
+        </View>
       )}
 
       {/* 列表 */}
-      <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
+      <ScrollView scrollY className="flex-1 mt-2 smooth-scroll hide-scrollbar">
         <View className="px-4 pb-20">
           {/* 表头 */}
           <View className="flex flex-row items-center justify-between py-2 border-b border-slate-700">

@@ -52,6 +52,12 @@ export class TickRecorderService implements OnModuleInit {
     });
     this.flushTimer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
     this.logger.log(`TickRecorder initialized (bufferCap=${MAX_BUFFER}, flushEvery=${FLUSH_INTERVAL_MS}ms)`);
+    // 关键：保持后台部署 → 实时监听大盘数据，无需前端触发
+    if (!this.polling.isPolling()) {
+      this.polling.start(5000).catch((err) => {
+        this.logger.warn(`自启 polling 失败：${(err as Error).message}`)
+      })
+    }
   }
 
   private flush(): void {

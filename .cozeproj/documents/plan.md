@@ -14,6 +14,16 @@
 
 > 海报已通过 `coze-coding-ai image` 生成（豆包 Seedream v5），永久保存于 docs/posters/。
 
+### 生成海报使用的业界优秀工具
+
+| 工具 | 厂商 | 用法 |
+|---|---|---|
+| **豆包 Seedream v5** (`doubao-seedream-5-0-260128`) | 字节跳动火山引擎 | AI 文生图，本项目三张海报均用此模型 |
+| `coze-coding-ai image` CLI | 扣子 Coding SDK | 沙箱预装，免安装直接调用 |
+| `coze-coding-dev-sdk` (TS) | 扣子 | Image / Video / Audio / LLM / Embedding 统一 SDK |
+
+> 业界同类参考：Midjourney v6 / DALL-E 3 / Stable Diffusion XL。本项目选用 Seedream 的原因是扣子 SDK 统一鉴权、低延迟、无外网出口依赖。
+
 ---
 
 ## 视角一：用户视角 — 一页纸功能推荐
@@ -39,6 +49,18 @@
 | 🟢 **真实数据全程可溯** | "这条曲线是真的吗？" → 一键看来源 + 缓存状态 | 大多用合成/随机数据，结果失真 |
 | 🟢 **AI Agent 内置** | 不用懂 Python，Agent 帮你算指标、出信号 | 几乎都是"看行情 + 下单"的工具 |
 | 🟢 **手机就能量化** | 等地铁的 5 分钟也能验证一个策略 | 量化平台只做 PC Web |
+
+### 业界优秀产品借鉴（用户视角）
+
+| 产品 | 一句话定位 | 本项目借鉴什么 |
+|---|---|---|
+| **雪球**（中国，5000w+ 用户）| 投资社区 + 行情 + 组合 | 信息架构（5 Tab 框架）、讨论区占位（V2.0）|
+| **Robinhood**（美国，2300w 用户）| 零佣金极简炒股 | 暗色交易终端视觉、"持仓一目了然"首页范式 |
+| **Wealthfront / Betterment**（智能投顾）| 自动资产配置 | "AI 帮你管钱"心智模型 → 对应我们的 Agent |
+| **Yahoo Finance App** | 行情 + 新闻 + 回测 | 收益曲线配色、K 线缩放交互 |
+| **TradingView**（移动端）| 图表 + 社区想法 | 双指缩放/十字光标/指标切换（已部分实现）|
+| **PTrade / QMT**（国内量化终端）| 本地量化平台 | "代码即策略"心智 → 未来代码 hook（V3.0）|
+| **雪球蛋卷基金 / 且慢** | 跟单 + 策略组合 | V2.0 策略市场的心智参照 |
 
 ### 适合谁
 
@@ -119,11 +141,40 @@
 **V2.0 暂缓**：策略市场 / 实盘对接 / Web 后台
 - 理由：依赖 V1.1/V1.2 的用户留存数据决定是否投入
 
+### 六、业界产品级对比（PM 视角）
+
+| 维度 | 雪球 | 同花顺 | Robinhood | Wealthfront | TradingView | Freqtrade | **QuantPilot** |
+|---|---|---|---|---|---|---|---|
+| 目标用户 | 散户+社区 | 老股民 | 美国散户 | 长线投资者 | 图表派 | 专业量化 | **散户+轻量化爱好者** |
+| 行情实时 | ✅ | ✅ | ✅ | — | ✅ | — | ✅ |
+| 模拟盘 | 🟡 虚拟组合 | ❌ | ❌ | — | ❌ | ✅ | ✅ |
+| 真实回测 | ❌ | 🟡 | ❌ | 🟡 | ✅ | ✅ | ✅ **真实K线** |
+| **数据透明** | ❌ | ❌ | ❌ | ✅ 白皮书 | 🟡 | ✅ | ✅ **业界最透明** |
+| AI 辅助 | 🟡 问答 | 🟡 i 问财 | ❌ | ✅ | 🟡 Pine Script | ❌ | ✅ **Agent 内置** |
+| 移动端 | ✅ App | ✅ App | ✅ App | ✅ App | ✅ App | ❌ PC | ✅ **三端小程序** |
+| 零代码 | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ **UI 配置** |
+| 学习曲线 | 低 | 低 | 低 | 低 | 中 | 高 | **中** |
+| 价格 | 免费 | 免费+增值 | 免费 | 0.25%/年 | 订阅 | 开源 | **免费** |
+
+**结论**：QuantPilot 在"雪球（同质化）↔ Freqtrade（高门槛）"之间，开辟**"AI 赋能的轻量化真实量化"**赛道，与 Wealthfront（智能投顾）形成"A 股版 AI 投顾"差异化定位。
+
+### 七、PM 视角"使用业界优秀工具"清单
+
+| 工作流 | 推荐工具 | 厂商 |
+|---|---|---|
+| 原型设计 | Figma / 即时设计 / 墨刀 | Figma Inc. / 国内替代 |
+| 用户访谈录音转写 | 通义听悟 / 飞书妙记 | 阿里 / 字节 |
+| 数据看板 | Metabase / Superset / 飞书多维表格 | 开源 / 字节 |
+| 反馈收集 | 腾讯兔小巢 / Trello | 腾讯 / Atlassian |
+| A/B 测试 | 自建埋点 + Supabase | — |
+| 文档协作 | 飞书 / Notion | 字节 / Notion |
+| 行业资讯 | 36氪 / 虎嗅 / Wallstreetcn | 国内财经媒体 |
+
 ---
 
 ## 视角三：技术视角 — 架构分层 + 技术选型 + 可测试性 + DFX
 
-### 一、架构分层（5 层模型）
+### 一、架构分层（5 层模型 + Mermaid 图）
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -159,6 +210,56 @@
 │   TOS 对象存储: 图片/海报资源                             │
 │   coze-coding-dev-sdk: LLM/Embedding（按需）             │
 └─────────────────────────────────────────────────────────┘
+```
+
+```mermaid
+graph TB
+    subgraph Client["Layer 1 · Client（用户端）"]
+        H5[H5 - Vite]
+        WEAPP[微信小程序]
+        TT[抖音小程序]
+    end
+
+    subgraph Gateway["Layer 2 · API Gateway（NestJS）"]
+        API["/api 全局前缀<br/>拦截器/异常/日志"]
+    end
+
+    subgraph Services["Layer 3 · Service（10 模块）"]
+        Market[market]
+        Stock[stock]
+        Backtest[backtest]
+        Strategy[strategy]
+        Risk[risk]
+        Paper[paper-trading]
+        Agent[agent-analysis]
+        Opt[optimizer]
+        Notif[notification]
+        DS[data-source]
+    end
+
+    subgraph Infra["Layer 4 · Infrastructure"]
+        DB[(SQLite + Drizzle)]
+        Cron[scheduler cron]
+        EE[EventEmitter]
+    end
+
+    subgraph External["Layer 5 · External"]
+        Sina[新浪行情]
+        Tx[腾讯K线]
+        TOS[TOS 对象存储]
+        LLM[coze SDK · LLM]
+    end
+
+    Client -->|Network.request| API
+    API --> Services
+    Services --> Infra
+    Services --> External
+
+    style Client fill:#1e293b,stroke:#3b82f6
+    style Gateway fill:#0f172a,stroke:#10b981
+    style Services fill:#1e293b,stroke:#10b981
+    style Infra fill:#0f172a,stroke:#f59e0b
+    style External fill:#1e293b,stroke:#ef4444
 ```
 
 ### 二、技术选型决策表
@@ -275,16 +376,84 @@ Network.downloadFile({ url: '/api/file.pdf' })
 | **国际化（i18n）** | C | 未实现 | V2.0 规划 |
 | **合规性（Compliance）** | A | 模拟盘 + 不接券商 + 数据来源透明 | 维持 |
 
-### 六、技术路线图
+#### DFX 评分可视化（Mermaid 雷达概念图）
 
-| 阶段 | 主题 | 关键改进 | 风险/收益 |
-|---|---|---|---|
-| **当前 V1.0** | 数据真实 + 工程规范 | 174 测试 + 透明化 | — |
-| **V1.1** | AI 诊断 + 异动雷达 | 复用 agent-analysis + scheduler | 低风险/中收益 |
-| **V1.2** | 多标的并行回测 | run-batch + Tab 切换 | 低风险/中收益 |
-| **V2.0** | 补 risk/agent 测试 + 拆 backtest | 覆盖率从 ~50% → 80% | **零功能收益，纯质量** |
-| **V2.1** | OpenAPI 自动生成 + CI | 联调效率 + 协作安全 | 中风险/高收益 |
-| **V3.0** | 策略即代码 hook + 实盘对接 | 高级用户需求 + 商业化 | 高风险/高收益 |
+```mermaid
+%%{init: {"theme": "dark"}}%%
+quadrantChart
+    title DFX 12 维度评估（数值越大越成熟）
+    x-axis 低 --> 高
+    y-axis 低 --> 高
+    quadrant-1 已成熟
+    quadrant-2 重点投入
+    quadrant-3 暂缓
+    quadrant-4 维持即可
+    可读性: [0.92, 0.88]
+    可测试性: [0.75, 0.78]
+    可维护性: [0.72, 0.75]
+    可部署性: [0.90, 0.88]
+    可扩展性: [0.85, 0.80]
+    可观测性: [0.65, 0.70]
+    可移植性: [0.88, 0.85]
+    可靠性: [0.85, 0.82]
+    安全性: [0.75, 0.72]
+    性能: [0.68, 0.70]
+    国际化: [0.30, 0.35]
+    合规性: [0.90, 0.85]
+```
+
+> **结论**：可观测性、性能、国际化是三大短板；V2.0 应优先补"可观测性 + 可测试性"。
+
+#### 业界 DFX 实践参考
+
+| 来源 | 借鉴点 |
+|---|---|
+| **Google SRE Book** | 可观测性三大支柱（Metrics/Logs/Traces）|
+| **Netflix Tech Blog** | Chaos Engineering 故障演练 |
+| **AWS Well-Architected** | 五大支柱（Operational Excellence / Security / Reliability / Performance / Cost）|
+| **《代码整洁之道》Robert C. Martin** | 可读性原则 |
+| **DDD（领域驱动设计）Eric Evans** | 模块边界划分（与本项目 NestJS 模块化契合）|
+
+### 六、技术路线图（Mermaid 时间线）
+
+```mermaid
+gantt
+    title QuantPilot 技术路线图（V1.0 → V3.0）
+    dateFormat YYYY-MM
+    section V1.0 已交付
+    数据真实+透明化      :done, v10, 2025-08, 2025-09
+    section V1.1 1周
+    AI 诊断日报+异动雷达 :active, v11, 2025-09, 1w
+    section V1.2 1周
+    多标的并行回测       :v12, after v11, 1w
+    section V2.0 1月
+    补 risk/agent 测试   :v20a, after v12, 2w
+    拆 backtest 1003行   :v20b, after v20a, 1w
+    OpenAPI + CI         :v20c, after v20b, 1w
+    section V3.0 2月
+    策略即代码 hook      :v30a, after v20c, 3w
+    实盘券商对接         :v30b, after v30a, 5w
+```
+
+### 七、技术视角"使用业界优秀工具"清单
+
+| 工作流 | 业界工具（推荐） | 当前项目是否使用 |
+|---|---|---|
+| AI 文生图（海报/封面）| 豆包 Seedream v5 / Midjourney v6 / DALL-E 3 | ✅ Seedream v5（本次）|
+| AI 文生视频 | 豆包 Seedance 2.0 / Sora / Runway Gen-3 | 🟡 后续（策略讲解视频）|
+| LLM 对话 | 豆包 Seed / DeepSeek / Kimi / GPT-4 | ✅ `coze-coding-dev-sdk` |
+| Embedding / RAG | 豆包 Embedding / BGE / OpenAI text-embedding-3 | ✅ 扣子 SDK 统一 |
+| ASR / TTS | 豆包语音 / ElevenLabs | 🟡 后续（语音播报诊断）|
+| 包管理 | pnpm（强制）| ✅ |
+| 提交规范 | Commitlint + Husky | ✅ |
+| 代码格式化 | Prettier + ESLint | ✅ |
+| 单元测试 | Jest + ts-jest + Supertest | ✅ |
+| E2E 测试 | Playwright（推荐）/ Cypress | ❌ 待办（E-E）|
+| 静态分析 | ESLint + tsc 严格模式 | ✅ |
+| 监控告警 | Sentry / OpenTelemetry | ❌ 待办 |
+| CI/CD | GitHub Actions / 扣子平台 | ❌ 待办（E-H）|
+| 文档站点 | Docusaurus / VitePress | 🟡 后续 |
+| Mock API | MSW（Mock Service Worker）| 🟡 待办（E-B）|
 
 ---
 

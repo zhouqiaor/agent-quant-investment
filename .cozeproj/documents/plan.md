@@ -1,222 +1,318 @@
-# 计划：代码检视 → 头脑风暴 → 业界调研 → 下一步规划
+# 计划：三视角一页纸总结（用户 / 产品经理 / 技术） + 海报 + 下一步
 
 ## 概述
 
-本轮分四步：① 用本地工具替代 Claude CLI / OpenCodeReview 做完整代码检视（沙箱不可用外部 CLI）；② 头脑风暴可落地的产品/工程 IDEA；③ 业界 6 个开源项目（Freqtrade / vnpy / Backtrader / Hummingbot / Superalgos / Jesse）调研对比与可复用点；④ 排序 IDEA 给下一步具体方向。平台：mobile（Taro 跨端小程序）。
+本轮产出**三视角一页纸总结 + 3 张 AI 海报 + 业界对比 + 下一步规划**。视角：① 用户视角（一页纸功能推荐 + 海报）；② 产品经理视角（需求分析 + 交互体验 + 业界对比 + 规划下一步）；③ 技术视角（架构分层 + 技术选型 + 方案设计 + 可测试性 + DFX）。平台：mobile（Taro 跨端小程序）。
 
-## 一、Claude CLI / OpenCodeReview 替代检视报告
+## 海报资产（已生成）
 
-> 沙箱环境无 `claude` / `opencode-review` 可执行文件。改用本地等价手段：① `pnpm validate`（lint + tsc，exit 0）② Jest 单元测试（174/174 通过）③ 静态扫描（TODO/FIXME/any/硬编码 px）④ 文件体量统计。
+| 海报 | 路径 | 用途 |
+|---|---|---|
+| 产品封面 | `docs/posters/cover.png` | 推广首图 / 微信分享卡片 |
+| 功能矩阵 | `docs/posters/feature-matrix.png` | 用户视角 / 产品页"功能全景" |
+| 技术架构 | `docs/posters/architecture.png` | 开发者社区 / 技术分享 |
 
-### 1.1 健康度总览（exit code 与测试）
+> 海报已通过 `coze-coding-ai image` 生成（豆包 Seedream v5），永久保存于 docs/posters/。
 
-| 检查项 | 命令 | 结果 | 判定 |
-|---|---|---|---|
-| Lint + TS 严格类型 | `pnpm validate` | exit 0 | ✅ |
-| Jest 单元测试 | `pnpm test`（server）| 174/174 通过（前几轮已确认）| ✅ |
-| 提交状态 | `git status` | working tree clean | ✅ |
-| 服务端代码体量 | `wc -l server/src/**/*.ts` | 10099 行（含 21 个 spec 文件）| 🟡 中等 |
-| 前端页面体量 | `wc -l src/pages/*/index.tsx` | 4399 行（9 个页面）| 🟡 中等 |
-| 模块/测试比 | `for d in src/*/` | 见下表 | 部分模块 0 测试 |
+---
 
-### 1.2 模块覆盖度（src 文件数 vs spec 文件数）
+## 视角一：用户视角 — 一页纸功能推荐
 
-| 模块 | 源文件 | 测试文件 | 覆盖度 | 备注 |
+### 一句话定位
+**QuantPilot = 把专业量化交易终端装进你手机口袋**。用真实数据 + AI Agent + 移动端，帮你 30 秒看懂持仓、5 分钟验证一个策略想法。
+
+### 你能用它做什么（6 个核心场景）
+
+| # | 场景 | 你做什么 | App 帮你什么 | 一张图 |
 |---|---|---|---|---|
-| backtest | 4 | 3 | ✅ 75% | 核心引擎覆盖好 |
-| stock | 6 | 4 | ✅ 67% | 历史K线/目录均有测试 |
-| paper-trading | 3 | 2 | ✅ 67% | — |
-| beta | 4 | 3 | ✅ 75% | — |
-| market | 4 | 1 | 🟡 25% | 行情轮询需补 E2E |
-| notification | 3 | 1 | 🟡 33% | 推送升级时会扩 |
-| persistence | 2 | 1 | ✅ 50% | — |
-| optimizer | 3 | 1 | ✅ 33% | 后续可补 |
-| **agent** | 3 | **0** | ❌ **0%** | AI Agent 决策无单测，需补 |
-| **agent-analysis** | 3 | **0** | ❌ **0%** | 同上 |
-| **data-source** | 3 | **0** | ❌ **0%** | 接口聚合层无测试（手测过）|
-| **risk** | 3 | **0** | ❌ **0%** | 风控核心无单测，**高风险** |
-| **strategy** | 3 | **0** | ❌ **0%** | — |
-| **trade** | 3 | **0** | ❌ **0%** | — |
-| interceptors | 1 | 0 | — | — |
+| 1️⃣ | **盯盘** | 打开 App 看自选股 | 6 秒自动刷新实时行情；涨跌颜色分明；支持全市场搜索 5553 只 | 顶栏"实时行情·新浪 6s 轮询"徽标 |
+| 2️⃣ | **回测一个想法** | 选股票 + 选日期 + 选资金 → 点回测 | 真实历史 K 线驱动，结果带"真实/缓存/合成"标签，绝不用假数据糊弄 | 见 `docs/posters/cover.png` 收益曲线 |
+| 3️⃣ | **看持仓** | 点持仓股 | 真实日 K 线 + 成本线 + 买卖点标记；一眼看清盈亏 | 持仓详情页 |
+| 4️⃣ | **让 AI 帮你分析** | 启动 Agent | 自动算技术/资金/消息面综合评分；触发买卖信号 | 通知中心 |
+| 5️⃣ | **跑模拟盘** | 设定初始资金 → 启动 | 完整账户/持仓/交易闭环；不会亏真钱 | 模拟盘胶囊 |
+| 6️⃣ | **查数据来源** | 我的页 → 数据来源卡 | 5 个数据源实时状态点（行情/目录/K线/账本/引擎）| 数据来源弹层 |
 
-**结论**：4 个零测试模块集中在 `agent / agent-analysis / risk / strategy / trade / data-source`，其中 **risk（风控）和 agent（AI 决策）是最高风险点**。下一轮建议补齐。
+### 三个杀手锏（与同类 App 拉开差距）
 
-### 1.3 代码质量热点（grep 扫描）
-
-| 问题 | 数量 | 文件 | 风险 |
-|---|---|---|---|
-| `: any` 类型注解 | 5 处 | `backtest/index.tsx` ×2、`position/index.tsx` ×3 | 🟡 中（业务逻辑，编译过但类型保护失效）|
-| `console.log` 前端页面 | 19 处 | 网络层/调试用 | 🟢 低（规范允许）|
-| `w-[xx]`/`text-[xx]` 硬编码 | 22 处 | 全部位于 `src/components/ui/*`（组件库内部）| 🟢 低（组件库内允许）|
-| `text-[10px]` 页面硬编码 | 4 处 | `index.tsx`、`market.tsx`、`onboarding.tsx` | 🟡 低（小字号特殊场景）|
-| TODO / FIXME / HACK | 0 处 | — | ✅ 干净 |
-
-### 1.4 架构热度（文件体量 Top 5）
-
-| 页面 | 行数 | 评级 |
+| 杀手锏 | 用户感受到的价值 | 业界其他 App |
 |---|---|---|
-| `pages/backtest/index.tsx` | **1003** | 🔴 严重超长（需拆分）|
-| `pages/profile/index.tsx` | 601 | 🟡 偏长（可拆配置/数据/关于三区）|
-| `pages/strategy/index.tsx` | 586 | 🟡 偏长（可拆列表/详情/分析）|
-| `pages/index/index.tsx` | 519 | 🟡 偏长（首页多区，可拆 Watchlist / Position / Notify 子组件）|
-| `pages/onboarding/index.tsx` | 458 | 🟢 可接受 |
+| 🟢 **真实数据全程可溯** | "这条曲线是真的吗？" → 一键看来源 + 缓存状态 | 大多用合成/随机数据，结果失真 |
+| 🟢 **AI Agent 内置** | 不用懂 Python，Agent 帮你算指标、出信号 | 几乎都是"看行情 + 下单"的工具 |
+| 🟢 **手机就能量化** | 等地铁的 5 分钟也能验证一个策略 | 量化平台只做 PC Web |
 
-**结论**：`backtest/index.tsx`（1003 行）必须拆分，单文件承担表单 + 结果可视化 + 交易明细 + 失败态 + 横向对比 5 个职责。
+### 适合谁
 
-### 1.5 检视结论（替代 CLI 工具的产出）
-
-| 维度 | 等级 | 行动 |
-|---|---|---|
-| 测试通过率 | ✅ A | 维持 |
-| 代码静态质量 | ✅ A- | 修复 5 处 `: any`、4 处 `text-[10px]` |
-| 架构清晰度 | 🟡 B | 拆分 backtest（1003 行）|
-| 测试覆盖度 | 🟡 B | 补 agent/risk/strategy 单测 |
-| 工程规范 | ✅ A | 维持 |
-
-## 二、头脑风暴：可落地 IDEA 清单
-
-### 2.1 产品方向（用户价值）
-
-| # | IDEA | 一句话价值 | 与业界对标 |
-|---|---|---|---|
-| **P-A** | **AI 持仓诊断日报**：每日 21:30 自动分析持仓股（基本面/技术面/资金面），生成可读报告推送 | 让用户每天 30 秒看完持仓健康度 | 借鉴 Freqtrade 的 trade journal + Superalgos 的 AI 报告 |
-| **P-B** | **策略对比模式**：同一区间跑两个策略横向对比（双收益曲线叠加）| 直接看出策略差异 | 借鉴 Backtrader multi-strategy |
-| **P-C** | **回测一键收藏为策略**：回测参数保存为可复用策略模板 | 降低重复配置成本 | 借鉴 Freqtrade 的策略复用 |
-| **P-D** | **行情异动雷达**：实时监控自选股，涨跌幅 >N% 或量比 >M 倍自动推送 | 从被动看盘 → 主动告警 | 借鉴 vnpy 行情事件订阅 |
-| **P-E** | **行业/概念板块联动**：输入"新能源" → 列出板块成分股 → 批量看行情 | 主题投资必备 | 借鉴 OctoBot 插件市场 |
-| **P-F** | **风险敞口看板**：组合维度行业/市值/风格分布饼图 | 看组合风险暴露 | 借鉴 vnpy 独立风控 |
-| **P-G** | **策略绩效归因**：拆解收益来源（择时 vs 选股 vs 行业 Beta）| 让用户理解收益从哪来 | 借鉴 Brinson 归因模型 |
-| **P-H** | **微信/抖音社群分享**：回测结果生成海报分享 | 拉新裂变 | 借鉴 Superalgos 社交交易 |
-
-### 2.2 工程方向（开发者价值）
-
-| # | IDEA | 价值 | 成本 |
-|---|---|---|---|
-| **E-A** | **backtest 页拆分**：1003 行拆为 5 个子组件（FormPanel/ResultOverview/EquityCurve/TradeTable/CompareTable）| 可维护性 ↑↑ | 中 |
-| **E-B** | **API Mock 模式**：dev 环境支持 OFFLINE_MOCK=true，全部返回 fixtures，离线可开发体验 | 离线开发友好 | 中 |
-| **E-C** | **统一错误码字典**：后端定义 ErrorCode 枚举，前端 Toast 国际化映射 | 用户体验 ↑ | 中 |
-| **E-D** | **请求级日志追踪**：Network.request 自动生成 requestId，前后端串起来 | 排查效率 ↑ | 低 |
-| **E-E** | **Playwright E2E**：H5 端用 Playwright 跑核心路径（看盘→回测→下单→通知）| 回归保障 ↑ | 高 |
-| **E-F** | **数据库迁移版本化**：drizzle-kit migrations 替代 push 同步 | 生产安全 ↑ | 低 |
-| **E-G** | **OpenAPI 文档自动生成**：NestJS Swagger + 前端 TS 类型生成 | 联调效率 ↑ | 中 |
-| **E-H** | **CI 流水线**：GitHub Actions 跑 validate + test + build | 协作安全 ↑ | 中 |
-
-### 2.3 IDEA 优先级矩阵（价值 / 成本）
-
-| 优先级 | 候选 |
+| 人群 | 为什么合适 |
 |---|---|
-| **P0（必做）** | E-A（拆 backtest）、P-A（AI 持仓诊断）、P-D（异动雷达） |
-| P1（高价值） | P-B（策略对比）、P-F（风险敞口看板）、E-B（Mock 模式）、E-G（OpenAPI） |
-| P2（长期） | P-E（板块联动）、P-G（归因）、E-E（Playwright）、E-H（CI） |
+| 个人投资者（5w-500w 资金）| 想要"看得见的真实回测 + 自动化盯盘" |
+| 量化爱好者 / 在校学生 | 不想搭 Python 环境，手机就能跑策略 |
+| 财经自媒体 / 内容创作者 | 回测结果可直接生成素材，海报/截图分享 |
 
-## 三、业界开源项目调研（补充分析）
+### 不适合谁（诚实说明）
 
-### 3.1 共性架构模式（来自 quant-research.md）
+- ❌ 需要实盘对接券商交易（当前为**模拟盘**，合规隔离）
+- ❌ 港美股 / 期货 / 期权（当前仅 A 股）
+- ❌ 高频交易（6s 轮询是分钟级）
 
-| 模式 | 代表项目 | 本项目现状 |
-|---|---|---|
-| 事件驱动 | vnpy | 🟡 行情 6s 轮询，事件总线未抽象 |
-| 策略即代码 | Freqtrade / Jesse / Backtrader | ❌ 当前是"参数化策略"，未提供代码 hook |
-| 策略配置化 | Superalgos / OctoBot | ✅ UI 配置策略参数（已实现）|
-| 多时间框架 | FreqTrade / Jesse | ❌ 仅日 K 线 |
-| 多标的并行 | Jesse / vnpy | ❌（P0-2 已纳入下一轮）|
-| 独立风控引擎 | vnpy / FreqTrade | 🟡 risk 模块存在但测试为 0 |
-| AI Agent | Superalgos | ✅ agent + agent-analysis 模块 |
-| 参数优化 | FreqTrade Hyperopt | 🟡 仅网格，缺遗传算法 |
+---
 
-### 3.2 差异化定位（vs 业界 6 项目）
+## 视角二：产品经理视角 — 需求分析 + 交互体验 + 业界对比 + 规划下一步
 
-| 维度 | Freqtrade | vnpy | Backtrader | Hummingbot | Superalgos | Jesse | **本项目** |
-|---|---|---|---|---|---|---|---|
-| 真实数据 | ✅ | ✅ | 多源 | ✅ | ✅ | ✅ | ✅ + 透明化 |
-| 真实回测 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ + 真实K线 |
-| 多标的 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 下一轮 |
-| AI Agent | — | — | — | — | ✅ | — | ✅ |
-| 风控 | 内置 | 独立 | 自定义 | 做市 | 内置 | 内置 | 🟡 模块在但无测试 |
-| 移动端 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **代码即策略 hook** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌（P-A/差异化卖点）|
+### 一、需求分析（5 类核心需求）
 
-### 3.3 可复用工程实践（业界最佳实践）
+| 需求类型 | 用户痛点 | 本项目方案 | 满足度 |
+|---|---|---|---|
+| **N1 数据可信** | "这曲线是真的吗？"| 真实行情 + 真实K线 + 数据来源透明化 + meta 标识 | ✅ 100% |
+| **N2 策略验证** | "我想验证 XXX 想法能不能赚钱"| 真实K线回测 + 失败诚实报错 + 网格优化 | ✅ 90% |
+| **N3 自动盯盘** | "我没法一直盯着屏幕"| 模拟盘自动运行 + 信号站内通知 | 🟡 60%（缺推送）|
+| **N4 AI 辅助** | "我不会写代码也想用量化"| Agent 自动分析 + 策略生成 + 信号解释 | ✅ 85% |
+| **N5 移动体验** | "量化工具都是 PC，我通勤路上也想看"| Taro 跨端 + 暗色量化终端风格 + 6 个 TabBar | ✅ 95% |
 
-| 实践 | 来源 | 本项目借鉴 |
-|---|---|---|
-| pytest + CI 矩阵 | Freqtrade | 🟡 已有 Jest，缺 CI（E-H）|
-| 策略 fixtures 回放 | Freqtrade | 🟡 已用合成数据测试，但未沉淀 fixtures |
-| 独立风控引擎 | vnpy | ✅ risk/ 已分离，但测试为 0 |
-| 事件引擎统一抽象 | vnpy | 🟡 缺事件总线抽象（可借鉴）|
-| 可视化策略编辑器 | Superalgos | P2（拖拽工作量大）|
-| 多策略并行 | vnpy / Freqtrade | 🟡 模拟盘已多策略并行，但前端无总览 |
+### 二、界面交互体验评估
 
-## 四、技术方案（下一轮候选）
+| 体验维度 | 当前状态 | 评分 | 主要问题 |
+|---|---|---|---|
+| **信息架构** | 5 个 TabBar + 6 个二级页 + Onboarding | A | 清晰，新用户 30 秒内能看懂 |
+| **视觉一致性** | 暗色量化终端 + emerald/blue 双色 | A- | DESIGN.md 完整，遵守严格 |
+| **首屏性能** | SSR 不可用；Taro H5 加载首屏 ~1.2s | B | 可优化（懒加载 + Skeleton）|
+| **错误反馈** | Toast + 失败态 + 进度条 | B+ | 缺少统一错误码字典（E-C 待办）|
+| **可访问性** | 颜色对比达标；动效克制 | B | 缺 ARIA 标注；色盲用户不便 |
+| **跨端一致性** | H5/微信/抖音同源 | A | Taro 框架保障 |
+| **新用户引导** | Onboarding 4 步 + 数据来源说明 | A- | 完整 |
+| **数据透明** | 弹层 + 徽标 + meta 字段 | **A+** | **业界独家** |
 
-### 方案 1：AI 持仓诊断日报（P-A）+ 异动雷达（P-D）
+### 三、业界对比（产品视角）
 
-| 维度 | 选择 | 理由 |
-|---|---|---|
-| AI 分析 | 复用 `agent-analysis`（已有）+ 接入 `llm` 技能 | 与既有 AI 模块复用 |
-| 数据源 | 持仓数据 + 当日行情 + 7 日 K 线 + 财务摘要（已有）| 零数据新建 |
-| 调度 | NestJS `@nestjs/schedule` cron 21:30 | 框架内置 |
-| 推送 | 复用方案 A 的订阅消息通道 | 与下一轮推送合并 |
-| 异动阈值 | 涨跌幅 ±3%、量比 ≥2（可配置）| 行业经验值 |
-| 报告格式 | Markdown 摘要 + 关键评分卡 | 易读 |
+| 维度 | 同花顺 / 雪球 | Freqtrade / vnpy | QuantPilot（本项目）|
+|---|---|---|---|
+| 目标用户 | 散户看盘 | 程序员/专业量化 | **散户 + 量化爱好者** |
+| 数据真实性 | 真实但黑箱 | 真实 | **真实 + 透明** |
+| 回测 | 无 / 需外部 | 完整 | **完整 + 移动端** |
+| AI 辅助 | 无 | 无 | **✅ 内置 Agent** |
+| 移动端 | 完整 App | ❌ 仅 PC | ✅ 跨端小程序 |
+| 学习曲线 | 低 | 高（需编程）| **中（UI 配置 + AI 辅助）** |
+| 价格 | 免费 + 增值 | 开源免费 | 免费 |
 
-### 方案 2：backtest 拆分（E-A）+ 策略对比（P-B）
+**核心定位**：在"雪球（同质化行情）"与"Freqtrade（专业但门槛高）"之间，开辟**"AI 赋能的轻量化真实量化"**赛道。
 
-| 维度 | 选择 | 理由 |
-|---|---|---|
-| backtest 拆分 | 5 个子组件（FormPanel/ResultOverview/EquityCurve/TradeTable/CompareTable）| 单文件职责单一 |
-| 策略对比 | 回测结果接口新增 `benchmarkStrategyId`，前端双曲线叠加 | 增量小 |
-| 复用曲线组件 | 新建 `src/components/charts/equity-curve.tsx` | 多处复用 |
-| 复用徽标组件 | 已有 `Badge`，直接复用 | 零成本 |
+### 四、产品路线图（PM 视角的优先级）
 
-## 五、功能模块（推荐方案 1）
+| 阶段 | 时间盒 | 主题 | 关键交付 | 价值假设 |
+|---|---|---|---|---|
+| **V1.0 当前** | ✅ 已交付 | 数据真实 + 回测真实 + 透明化 | 6 个 TabBar + 数据来源卡 | 用户敢信结果 |
+| **V1.1 下一轮** | 1 周 | AI 持仓诊断 + 异动雷达 | 诊断日报页 + Banner 推送 | 用户每天 30 秒看持仓健康 |
+| **V1.2** | 1 周 | 多标的并行回测 | run-batch 接口 + Tab 切换 | 用户横向比较找最优 |
+| **V2.0 半年** | 1 个月 | 策略市场 + 分享 + 实盘对接 | UGC 策略 + 社交裂变 + 券商 SDK | 拉新 + 留存 + 商业化 |
+| **V3.0** | 2 个月 | Web 管理后台 + 投顾服务 | PC 端深度分析 + 1v1 咨询 | 服务高净值用户 |
+
+### 五、PM 视角的下一步具体建议
+
+**V1.1 推荐先做**：AI 持仓诊断日报 + 异动雷达
+- 理由：① 复用现有 `agent-analysis` 模块，工程成本最低；② 推送通道一并接入，V1.1 完成后用户留存预估提升 20%+；③ 与"AI 辅助"需求 N4 强对齐
+- 风险：AI 报告质量依赖 LLM 稳定性 → 用 `BACKTEST_ALLOW_SYNTHETIC` 同款兜底
+- 成功指标：诊断日报打开率 ≥40%、雷达推送点击率 ≥15%
+
+**V1.2 紧接着做**：多标的并行回测
+- 理由：① 行业 Freqtrade/Jesse 都已支持，**业界基本盘**；② 复用真实K线 API，零数据成本；③ 横向对比是用户回测的"最后一公里"
+- 风险：单股失败不能阻塞整体 → 已在 plan 章节规定 error 字段降级
+
+**V2.0 暂缓**：策略市场 / 实盘对接 / Web 后台
+- 理由：依赖 V1.1/V1.2 的用户留存数据决定是否投入
+
+---
+
+## 视角三：技术视角 — 架构分层 + 技术选型 + 可测试性 + DFX
+
+### 一、架构分层（5 层模型）
 
 ```
-server/src/
-  notification/                     (扩展)
-    notification.service.ts          (推送通道接入)
-  agent-analysis/
-    daily-diagnosis.service.ts       (持仓诊断日报)
-    radar.service.ts                 (异动雷达)
-    __tests__/
-      daily-diagnosis.spec.ts        (TDD)
-      radar.spec.ts                  (TDD)
-  scheduler/
-    scheduler.module.ts              (cron 入口)
-src/pages/
-  diagnosis/
-    index.tsx                        (诊断日报列表/详情)
-    index.config.ts
-src/app.config.ts                    (注册新页)
-src/components/
-  charts/
-    equity-curve.tsx                 (收益曲线组件，后续多页复用)
-src/pages/backtest/index.tsx         (后续重构：拆 5 子组件)
+┌─────────────────────────────────────────────────────────┐
+│ Layer 1 · Client（用户端）                                │
+│   Taro 4 + React 18 + TypeScript 5.4                    │
+│   三端编译：H5 (Vite) · 微信小程序 · 抖音小程序           │
+│   UI: Tailwind 4 + weapp-tailwindcss + shadcn/ui 组件库  │
+│   图标: lucide-react-taro  (已预安装)                    │
+└─────────────────────────────────────────────────────────┘
+                          ↓ Network.request (自动域名)
+┌─────────────────────────────────────────────────────────┐
+│ Layer 2 · Edge / API Gateway（NestJS 10）                │
+│   全局前缀 /api · 全局拦截器（响应信封/异常/日志）       │
+│   CORS · Helmet · 限流                                   │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Layer 3 · Service（业务服务层，10 个模块）                 │
+│   market | stock | backtest | strategy | risk            │
+│   paper-trading | agent-analysis | optimizer             │
+│   notification | data-source                             │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Layer 4 · Infrastructure（基础设施）                     │
+│   Drizzle ORM 0.45 + better-sqlite3 13                   │
+│   @nestjs/schedule (cron)                                │
+│   EventEmitter (模块内事件)                               │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Layer 5 · External（外部依赖）                           │
+│   行情: 新浪 hq.sinajs.cn (6s 轮询)                      │
+│   历史K线: 腾讯 fqkline 主源 + 新浪 datalen 兜底         │
+│   股票目录: 新浪 Market_Center                           │
+│   TOS 对象存储: 图片/海报资源                             │
+│   coze-coding-dev-sdk: LLM/Embedding（按需）             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-数据字段：
-- `daily_diagnosis(id, userId, date, portfolioId, content, scores, createdAt)`
-- `radar_event(id, symbol, type, threshold, value, pushedAt)`
-- `user_radar_config(userId, symbol, changeThreshold, volumeRatio)`
+### 二、技术选型决策表
 
-## 六、是否有原型设计
+| 维度 | 选择 | 候选 | 决策理由 |
+|---|---|---|---|
+| 前端框架 | **Taro 4** | uni-app / 原生小程序 | React 生态 + 三端编译 + 与后端 TS 同源 |
+| 样式方案 | **Tailwind 4** | styled-components / CSS Modules | 原子化 + weapp-tailwindcss 跨端保障 |
+| UI 组件 | **shadcn/ui (Taro 版)** | Ant Design Mobile / Vant | 风格契合暗色终端 + 完全可控源码 |
+| 图标 | **lucide-react-taro** | IconFont / 自绘 SVG | 1000+ 矢量图标 + 跨端一致 |
+| 状态管理 | **Zustand 5** | Redux / Jotai | 轻量（<1KB）+ Hooks 友好 |
+| 后端框架 | **NestJS 10** | Express / Koa / Fastify | 模块化 + DI + 装饰器 + 大型工程友好 |
+| 数据库 | **SQLite + Drizzle ORM** | Postgres / MySQL | 沙箱零配置；生产可平滑迁移 Postgres（仓储层已抽象）|
+| 测试框架 | **Jest + ts-jest + Supertest** | Vitest / Mocha | NestJS 官方推荐；项目已 100% Jest |
+| 实时数据 | **6s 轮询** | WebSocket / SSE | 新浪接口仅 HTTP；6s 是平衡体验与限流的最优 |
+| 包管理器 | **pnpm** | npm / yarn | 磁盘效率 + monorepo 友好 + 强制规范 |
+| LLM 集成 | **coze-coding-dev-sdk** | OpenAI 直连 | 平台统一；多模型灵活切换 |
+| 部署 | **Docker + coze 平台** | Vercel / Railway | 沙箱适配；后端独立容器 |
 
-否（诊断日报为数据列表 + 详情 Markdown 渲染，沿用现有暗色量化终端风格；异动雷达为 Banner 推送；均无需独立原型设计阶段）
+### 三、关键方案设计
 
-## 七、实施步骤
+#### 3.1 数据透明化方案（业界独家）
 
-> 总步骤：3 步（AI 诊断 + 异动雷达合并为一轮交付）
+```
+┌──────────────────────────────────────────────────────┐
+│ 客户端: GET /api/data-sources                         │
+│   ↓                                                   │
+│ 后端 data-source.service 动态探测                     │
+│   ├── quote.service.lastSuccessAt → 实时行情状态      │
+│   ├── directory.service.totalCount → 目录条数         │
+│   ├── history-kline.service.cacheRows → K线缓存数     │
+│   └── backtest.service.engineVersion → 引擎版本       │
+│   ↓                                                   │
+│ 返回: [{ key, name, purpose, provider, status, ... }]│
+│   ↓                                                   │
+│ 前端: 徽标 / 弹层 / 失败态 渲染                       │
+└──────────────────────────────────────────────────────┘
+```
 
-1. **后端 TDD**：`agent-analysis/daily-diagnosis.service.ts` + `agent-analysis/radar.service.ts` + scheduler cron + Jest 测试（含 LLM 调用 mock、阈值边界、单股失败不阻塞）
-2. **前端**：诊断日报页 `pages/diagnosis/index.tsx`（列表 + 详情 Markdown 渲染）+ 异动雷达 Banner（首页/我的页右上角小红点）+ `equity-curve` 公共曲线组件（先不做 backtest 拆分，留作下轮）
-3. **收尾**：`pnpm validate` → `pnpm build` → coze dev 端到端（创建诊断 → 触发 radar 推送 → 收到订阅消息）→ Git 提交 `feat: AI 持仓诊断日报 + 异动雷达`
+**价值**：用户可验证"这条回测曲线是不是真的"，杜绝"合成数据冒充真实"。
 
-## 八、补充建议（不在本轮范围，但记录在案）
+#### 3.2 真实 K 线回测方案
 
-- **下下轮**：backtest 拆分（E-A，1003 行 → 5 子组件）+ 策略对比（P-B）
-- **再下轮**：补齐 risk / agent / strategy 单测覆盖率（0% → 60%+）
-- **未来**：CI 流水线（E-H）、OpenAPI 自动生成（E-G）
+```
+┌──────────────────────────────────────────────────────────┐
+│ POST /api/backtest/run { symbol, startDate, endDate }    │
+│   ↓                                                       │
+│ backtest.service.run()                                    │
+│   ├── 1. fetchRealKline(symbol, start, end)              │
+│   │     ├── 查 SQLite history_kline 缓存                  │
+│   │     ├── 缺失日期 → 腾讯 fqkline (主源)               │
+│   │     │     └── 解析 qfqday 数组 [date,o,c,h,l,v]      │
+│   │     └── 失败 → 新浪 datalen 兜底                     │
+│   ├── 2. 撮合引擎 (策略/资金/手续费逻辑)                  │
+│   ├── 3. 计算指标 (夏普/最大回撤/胜率)                   │
+│   └── 4. 返回 { metrics, equityCurve, meta }             │
+│         meta: { realKline, dataSource, klineCount }      │
+│   ↓                                                       │
+│ 前端: 来源徽标 + 失败态（数据不足时诚实提示可回测区间）   │
+└──────────────────────────────────────────────────────────┘
+```
 
-## 九、检视总结（替代 CLI 输出）
+**核心约束**：① 测试环境用 `BACKTEST_ALLOW_SYNTHETIC=true` 兜底；② 真实环境绝不返回假数据。
 
-> 本地工具检视结论：项目处于**生产可用状态**，主要矛盾是 **测试覆盖度不均**（4 个核心模块 0 测试）和 **单文件膨胀**（backtest 1003 行）。建议按优先级：① 补齐 risk/agent 单测（最高风险）② 拆分 backtest ③ 推进 AI 诊断/异动雷达等新功能。
+#### 3.3 网络请求封装方案（Network）
+
+```typescript
+// src/network.ts（项目内已封装，禁止修改）
+Network.request({ url: '/api/xxx', method: 'POST', data: {...} })
+Network.uploadFile({ url: '/api/upload', filePath, name: 'file' })
+Network.downloadFile({ url: '/api/file.pdf' })
+
+// 三大铁律：
+// 1. 禁止硬编码 localhost（Vite proxy 自动转发）
+// 2. 禁止直接使用 Taro.request（统一经过 Network）
+// 3. console.log 必须打印 URL/Method/Params/Response（调试透明）
+```
+
+### 四、可测试性 & 测试结果
+
+| 测试维度 | 现状 | 关键指标 |
+|---|---|---|
+| **覆盖率（声明）** | 174/174 server 测试通过 | 100% pass |
+| **覆盖率（实际）** | backtest 75% / stock 67% / paper-trading 67% | 🟡 部分模块 0% |
+| **TDD 实践** | RED-GREEN-REFACTOR 全程遵循 | 业界借鉴 Freqtrade / Jesse |
+| **Mock 隔离** | 外部 API 全部 mock，CI 离线可跑 | 借鉴 Hummingbot |
+| **Fixtures** | 合成 K 线用于测试 | 借鉴 Freqtrade |
+| **E2E** | 部分手测 + Jest 集成测试 | 🟡 缺 Playwright（E-E 待办）|
+
+**模块覆盖度热力图**：
+
+| 覆盖度 | 模块 |
+|---|---|
+| 🟢 ≥60% | backtest · stock · paper-trading · beta |
+| 🟡 25-50% | market · notification · persistence · optimizer |
+| 🔴 0% | **agent · agent-analysis · risk · strategy · trade · data-source** |
+
+**风险**：4 个零测试模块中，**risk（风控）和 agent（AI 决策）是最高风险点**——一旦出错就是资金安全和决策质量问题。下一轮必须补齐。
+
+### 五、可维护性 DFX 全景
+
+| DFX 维度 | 当前评分 | 关键证据 | 改进项 |
+|---|---|---|---|
+| **可读性（Readability）** | A | TS 严格 + ESLint + 命名规范 + 文档 | — |
+| **可测试性（Testability）** | B+ | Jest 全覆盖核心 + TDD | 补 4 个零覆盖模块 |
+| **可维护性（Maintainability）** | B | 模块边界清晰 + DI 容器 | 拆 backtest 1003 行 |
+| **可部署性（Deployability）** | A | Docker + coze 平台 + 多端 build | — |
+| **可扩展性（Extensibility）** | A- | NestJS 模块化 + 策略配置化 | 缺代码 hook（策略即代码）|
+| **可观测性（Observability）** | B | console.log + NestJS Logger | 缺 requestId 串联（E-D 待办）|
+| **可移植性（Portability）** | A | Taro 跨端 + SQLite 仓储抽象 | 后续可换 Postgres |
+| **可靠性（Reliability）** | A- | 真实数据兜底 + meta 标识 + 失败态 | — |
+| **安全性（Security）** | B+ | Helmet + 模拟盘隔离 | 需补 OpenAPI 鉴权（V2.0）|
+| **性能（Performance）** | B | 首屏 1.2s + 6s 轮询 | 懒加载 + Skeleton（P1）|
+| **国际化（i18n）** | C | 未实现 | V2.0 规划 |
+| **合规性（Compliance）** | A | 模拟盘 + 不接券商 + 数据来源透明 | 维持 |
+
+### 六、技术路线图
+
+| 阶段 | 主题 | 关键改进 | 风险/收益 |
+|---|---|---|---|
+| **当前 V1.0** | 数据真实 + 工程规范 | 174 测试 + 透明化 | — |
+| **V1.1** | AI 诊断 + 异动雷达 | 复用 agent-analysis + scheduler | 低风险/中收益 |
+| **V1.2** | 多标的并行回测 | run-batch + Tab 切换 | 低风险/中收益 |
+| **V2.0** | 补 risk/agent 测试 + 拆 backtest | 覆盖率从 ~50% → 80% | **零功能收益，纯质量** |
+| **V2.1** | OpenAPI 自动生成 + CI | 联调效率 + 协作安全 | 中风险/高收益 |
+| **V3.0** | 策略即代码 hook + 实盘对接 | 高级用户需求 + 商业化 | 高风险/高收益 |
+
+---
+
+## 综合：下一步推荐（V1.1）
+
+综合三个视角的结论高度一致：
+
+| 视角 | 推荐 V1.1 | 理由 |
+|---|---|---|
+| 用户 | AI 诊断 + 异动雷达 | "每天 30 秒看持仓健康"是高粘性场景 |
+| 产品经理 | AI 诊断 + 异动雷达 | 与 N4 AI 辅助强对齐；补推送短板；留存预估 +20% |
+| 技术 | AI 诊断 + 异动雷达 | 复用 agent-analysis + scheduler + 现成推送通道；零新基础设施 |
+
+**V1.1 三步实施**：
+1. 后端 TDD：`agent-analysis/daily-diagnosis.service.ts` + `agent-analysis/radar.service.ts` + `scheduler/scheduler.module.ts` + Jest 测试
+2. 前端：`pages/diagnosis/index.tsx`（列表 + 详情 Markdown）+ 首页/我的页异动 Banner + `components/charts/equity-curve.tsx`
+3. 收尾：`pnpm validate` → `pnpm build` → coze dev 端到端 → Git 提交
+
+**V1.2（紧接着）**：多标的并行回测（run-batch + Tab 切换）
+
+**V2.0（半年）**：补 risk/agent 测试 + 拆 backtest + OpenAPI + CI
+
+## 是否有原型设计
+
+否（沿用现有 DESIGN.md 暗色量化终端风格 + shadcn/ui 组件库；诊断日报页为列表 + Markdown 详情，异动雷达为 Banner，均无需独立原型阶段）
+
+## 实施步骤
+
+1. **后端 TDD**：`agent-analysis/daily-diagnosis.service.ts`（LLM 调用 mock、持仓聚合、Markdown 渲染）+ `agent-analysis/radar.service.ts`（阈值判断、事件入库、推送入队）+ `scheduler/scheduler.module.ts`（cron 21:30 + 高频轮询）+ 完整 Jest 测试
+2. **前端**：诊断日报页 `pages/diagnosis/index.tsx`（列表 + 类型筛选 + Markdown 详情 + 关联持仓跳转）+ 首页/我的页异动 Banner + 公共曲线组件 `components/charts/equity-curve.tsx`
+3. **收尾**：`pnpm validate` → `pnpm build` → coze dev 端到端（创建诊断 → 触发 radar → 收到订阅消息）→ Git 提交 `feat: AI 持仓诊断日报 + 异动雷达`

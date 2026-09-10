@@ -191,6 +191,20 @@ export default defineConfig<'vite'>(async (merge, _env) => {
             changeOrigin: true,
           },
         },
+        // 关键修复：Vite 监听会捕获后端 SQLite WAL 文件每次写入，
+        // 触发页面 reloading。必须显式排除 server/data 等动态写目录。
+        // 详见 docs/development/2025-09-vite-watch-loop.md
+        watch: {
+          ignored: [
+            '**/server/data/**',
+            '**/*.db',
+            '**/*.db-shm',
+            '**/*.db-wal',
+            '**/dist/**',
+            '**/dist-*/**',
+            '**/.cozeproj/**',
+          ],
+        },
       },
       miniCssExtractPluginOption: {
         ignoreOrder: true,

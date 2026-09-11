@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1440" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0c1e3a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="bull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1080" height="1440" fill="url(#bg)"/>
+
+  <!-- 顶部装饰光晕 -->
+  <circle cx="180" cy="120" r="220" fill="#3b82f6" opacity="0.12"/>
+  <circle cx="900" cy="180" r="180" fill="#06b6d4" opacity="0.10"/>
+
+  <!-- 品牌条 -->
+  <rect x="60" y="60" width="960" height="2" fill="url(#accent)" opacity="0.6"/>
+
+  <!-- 主标题 -->
+  <text x="60" y="160" font-size="84" font-weight="800" fill="#f1f5f9">QuantPilot</text>
+  <text x="60" y="210" font-size="28" font-weight="500" fill="#94a3b8">小程序的量化交易实验室</text>
+
+  <!-- 副标题 -->
+  <text x="60" y="290" font-size="36" font-weight="700" fill="#e2e8f0">从想法到验证，</text>
+  <text x="60" y="340" font-size="36" font-weight="700" fill="#22d3ee">一站式策略迭代平台</text>
+
+  <!-- 三大核心能力 -->
+  <g transform="translate(60,400)">
+    <rect width="295" height="200" rx="20" fill="#1e293b" stroke="#334155"/>
+    <text x="20" y="55" font-size="48">📡</text>
+    <text x="20" y="105" font-size="26" font-weight="700" fill="#22d3ee">实时行情</text>
+    <text x="20" y="145" font-size="18" fill="#cbd5e1">5秒级轮询</text>
+    <text x="20" y="170" font-size="18" fill="#cbd5e1">全市场录制</text>
+  </g>
+
+  <g transform="translate(395,400)">
+    <rect width="295" height="200" rx="20" fill="#1e293b" stroke="#334155"/>
+    <text x="20" y="55" font-size="48">🧪</text>
+    <text x="20" y="105" font-size="26" font-weight="700" fill="#a78bfa">A/B 对比</text>
+    <text x="20" y="145" font-size="18" fill="#cbd5e1">同标并行跑</text>
+    <text x="20" y="170" font-size="18" fill="#cbd5e1">数据驱动调参</text>
+  </g>
+
+  <g transform="translate(730,400)">
+    <rect width="295" height="200" rx="20" fill="#1e293b" stroke="#334155"/>
+    <text x="20" y="55" font-size="48">🤖</text>
+    <text x="20" y="105" font-size="26" font-weight="700" fill="#34d399">AI 诊断</text>
+    <text x="20" y="145" font-size="18" fill="#cbd5e1">智能体日报</text>
+    <text x="20" y="170" font-size="18" fill="#cbd5e1">异动雷达</text>
+  </g>
+
+  <!-- 数据展示卡 -->
+  <g transform="translate(60,650)">
+    <text x="0" y="0" font-size="24" font-weight="600" fill="#94a3b8">运营指标</text>
+    <g transform="translate(0,30)">
+      <rect width="455" height="100" rx="14" fill="#0f172a" stroke="#1e293b"/>
+      <text x="20" y="45" font-size="36" font-weight="800" fill="#22d3ee">6</text>
+      <text x="70" y="45" font-size="18" fill="#cbd5e1">Tab</text>
+      <text x="20" y="75" font-size="14" fill="#94a3b8">首页 / 行情 / 策略 / 交易 / 报告 / 我的</text>
+    </g>
+    <g transform="translate(485,30)">
+      <rect width="455" height="100" rx="14" fill="#0f172a" stroke="#1e293b"/>
+      <text x="20" y="45" font-size="36" font-weight="800" fill="#34d399">50+</text>
+      <text x="110" y="45" font-size="18" fill="#cbd5e1">API</text>
+      <text x="20" y="75" font-size="14" fill="#94a3b8">REST + 推送 + 回测 + 优化 + A/B</text>
+    </g>
+  </g>
+
+  <!-- 净值曲线示意 -->
+  <g transform="translate(60,830)">
+    <text x="0" y="0" font-size="24" font-weight="600" fill="#94a3b8">A/B 策略净值对比示意</text>
+    <rect x="0" y="20" width="960" height="240" rx="14" fill="#0f172a" stroke="#1e293b"/>
+    <!-- 网格 -->
+    <line x1="0" y1="140" x2="960" y2="140" stroke="#334155" stroke-dasharray="4 4"/>
+    <!-- V1 稳健 -->
+    <path d="M 0 200 L 100 180 L 200 160 L 300 150 L 400 145 L 500 130 L 600 120 L 700 110 L 800 100 L 900 90 L 960 85"
+      fill="none" stroke="#60a5fa" stroke-width="3"/>
+    <!-- V2 激进 -->
+    <path d="M 0 200 L 100 170 L 200 150 L 300 110 L 400 90 L 500 70 L 600 100 L 700 60 L 800 40 L 900 80 L 960 55"
+      fill="none" stroke="#f59e0b" stroke-width="3"/>
+    <!-- 图例 -->
+    <g transform="translate(20,40)">
+      <circle cx="6" cy="6" r="5" fill="#60a5fa"/>
+      <text x="20" y="12" font-size="16" fill="#cbd5e1">v1 稳健</text>
+      <circle cx="100" cy="6" r="5" fill="#f59e0b"/>
+      <text x="114" y="12" font-size="16" fill="#cbd5e1">v2 激进</text>
+    </g>
+    <!-- 胜出标注 -->
+    <text x="780" y="200" font-size="20" font-weight="700" fill="#f59e0b">↑ v2 胜出</text>
+  </g>
+
+  <!-- 目标用户 -->
+  <g transform="translate(60,1130)">
+    <text x="0" y="0" font-size="24" font-weight="600" fill="#94a3b8">为谁而生</text>
+    <g transform="translate(0,25)">
+      <text x="0" y="40" font-size="20" font-weight="600" fill="#e2e8f0">📊 量化入门者</text>
+      <text x="0" y="65" font-size="16" fill="#94a3b8">拖拽式模板，3 分钟跑通首个回测</text>
+      <text x="500" y="40" font-size="20" font-weight="600" fill="#e2e8f0">🧬 策略研究员</text>
+      <text x="500" y="65" font-size="16" fill="#94a3b8">A/B 实验 + 参数敏感性，沉淀版本树</text>
+      <text x="0" y="120" font-size="20" font-weight="600" fill="#e2e8f0">💼 投资顾问</text>
+      <text x="0" y="145" font-size="16" fill="#94a3b8">AI 诊断日报 + 多账户并发，输出客户报告</text>
+      <text x="500" y="120" font-size="20" font-weight="600" fill="#e2e8f0">🎓 高校师生</text>
+      <text x="500" y="145" font-size="16" fill="#94a3b8">开源可二次开发，教学研究友好</text>
+    </g>
+  </g>
+
+  <!-- 底部 CTA -->
+  <g transform="translate(60,1340)">
+    <rect width="960" height="60" rx="30" fill="url(#accent)"/>
+    <text x="480" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">
+      小程序搜「QuantPilot」  ·  docs/SPEC*.md  ·  github.com/your-org/quantpilot
+    </text>
+  </g>
+</svg>

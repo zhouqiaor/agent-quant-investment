@@ -12,6 +12,54 @@ import {
 } from './schema';
 import type { FilterOp } from './schema';
 
+/** 连续涨停计数上限（字段定义 0~5） */
+export const MAX_CONSECUTIVE_LIMIT_UP = 5;
+/** 涨停判定容差（百分点）：涨幅 ≥ 阈值 - 0.3%，应对四舍五入（如 9.98% 算涨停） */
+export const LIMIT_UP_TOLERANCE = 0.3;
+
+/**
+ * 涨停阈值（百分比涨幅），按股票属性：
+ * - 名称含 ST：5%
+ * - 创业板（30）/ 科创板（688）：20%
+ * - 北交所（market=bj 或 43/83/87/88/920 开头）：20%
+ * - 其余主板（60/00 等）：10%
+ */
+export function limitUpThreshold(symbol: string, name: string, market: string): number {
+  if (name && name.includes('ST')) return 5;
+  if (/^(30|688)/.test(symbol)) return 20;
+  if (market === 'bj' || /^(43|83|87|88|920)/.test(symbol)) return 20;
+  return 10;
+}
+
+/**
+ * 连续涨停天数：从最新一日向前数，每日收盘相对前一日收盘涨幅达到涨停阈值
+ * （含 LIMIT_UP_TOLERANCE 容差）即连续；一旦中断立即停止计数。
+ * 封顶 MAX_CONSECUTIVE_LIMIT_UP。K 线不足 2 根时返回 0。
+ */
+export function calcConsecutiveLimitUp(
+  klines: readonly KlineData[],
+  symbol: string,
+  name: string,
+  market: string,
+): number {
+  if (!Array.isArray(klines) || klines.length < 2) return 0;
+  const threshold = limitUpThreshold(symbol, name, market);
+  let count = 0;
+  for (let i = klines.length - 1; i >= 1; i--) {
+    const prevClose = klines[i - 1]!.close;
+    const close = klines[i]!.close;
+    if (!(prevClose > 0)) break;
+    const pct = ((close - prevClose) / prevClose) * 100;
+    if (pct >= threshold - LIMIT_UP_TOLERANCE) {
+      count++;
+      if (count >= MAX_CONSECUTIVE_LIMIT_UP) break;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
 /**
  * 条件选股器执行服务
  *
@@ -166,7 +214,14 @@ export class ScreenerService {
    * quote：来自 fetchRealtimeQuote 的实时行情（含 pe/pb/marketCap）
    */
   private buildItem(
-    dirRow: { symbol: string; name: string; market: string; price: number; changePercent: number },
+    dirRow: {
+      symbol: string;
+      name: string;
+      market: string;
+      price: number;
+      changePercent: number;
+      turnoverratio?: number | null;
+    },
     quote: StockInfo,
     bundle: KlineWithIndicators | undefined,
   ): ScreenerItem {
@@ -182,13 +237,25 @@ export class ScreenerService {
     if (quote.pb) item.pb = quote.pb;
     if (quote.marketCap) item.marketCap = quote.marketCap;
 
-    // quote extras：当前 StockInfo 未直接提供，先填 undefined
-    item.turnoverRate = undefined;
+    // turnoverRate：目录同步时随新浪 turnoverratio 落库（百分比，如 1.12 = 1.12%）
+    if (
+      dirRow.turnoverratio != null &&
+      Number.isFinite(dirRow.turnoverratio)
+    ) {
+      item.turnoverRate = dirRow.turnoverratio;
+    }
     item.volumeRatio = undefined;
-    item.consecutiveLimitUp = 0; // TODO: 接 tick 后回填
+    item.consecutiveLimitUp = 0;
 
     // technical / pattern：基于 indicators
     if (bundle && bundle.klines.length > 0) {
+      // 连续涨停：基于日 K 收盘序列（纯函数，不依赖指标）
+      item.consecutiveLimitUp = calcConsecutiveLimitUp(
+        bundle.klines,
+        dirRow.symbol,
+        dirRow.name,
+        dirRow.market,
+      );
       const indicators =
         bundle.indicators ?? this.indicatorCalc.computeAll(bundle.klines);
       this.applyIndicators(item, bundle.klines, indicators);

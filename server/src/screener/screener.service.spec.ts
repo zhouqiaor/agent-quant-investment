@@ -14,6 +14,10 @@
  * 10. 进程内缓存 key 不区分 page（翻页复用全集）
  */
 import { ScreenerService } from './screener.service';
+import {
+  calcConsecutiveLimitUp,
+  limitUpThreshold,
+} from './screener.service';
 import type { ScreenerRequest } from './schema';
 import { PersistenceService } from '@/persistence/persistence.service';
 import { StockService } from '@/stock/stock.service';
@@ -72,10 +76,11 @@ interface Mocks {
 }
 
 function createMocks(opts: {
-  directory?: Array<{ symbol: string; name: string }>;
+  directory?: Array<{ symbol: string; name: string; market?: string }>;
   quoteMap?: Record<string, StockInfo>;
   klineMap?: Record<string, KlineWithIndicators>;
   failingKlines?: Set<string>;
+  turnoverMap?: Record<string, number | null>;
 }): Mocks {
   const directory = opts.directory ?? [];
   const quoteMap = opts.quoteMap ?? {};
@@ -86,26 +91,22 @@ function createMocks(opts: {
 
   const persistence = {
     searchDirectory: jest.fn((q: string, limit?: number) => {
+      const toRow = (d: { symbol: string; name: string; market?: string }) => ({
+        symbol: d.symbol,
+        name: d.name,
+        market: d.market ?? 'sh',
+        price: 0,
+        changePercent: 0,
+        turnoverratio: opts.turnoverMap?.[d.symbol] ?? null,
+      });
       // 模拟"全量目录"：q='' 仍返回全集
       if (!q || q === '') {
-        return directory.map((d) => ({
-          symbol: d.symbol,
-          name: d.name,
-          market: 'sh',
-          price: 0,
-          changePercent: 0,
-        }));
+        return directory.map(toRow);
       }
       return directory
         .filter((d) => d.symbol.includes(q) || d.name.includes(q))
         .slice(0, limit ?? 20)
-        .map((d) => ({
-          symbol: d.symbol,
-          name: d.name,
-          market: 'sh',
-          price: 0,
-          changePercent: 0,
-        }));
+        .map(toRow);
     }),
   } as unknown as jest.Mocked<PersistenceService>;
 
@@ -492,5 +493,165 @@ describe('ScreenerService (TDD)', () => {
       }),
     );
     expect(Array.isArray(resNeg.items)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// turnoverRate / consecutiveLimitUp 真实逻辑
+// ---------------------------------------------------------------------------
+
+describe('ScreenerService - turnoverRate / consecutiveLimitUp', () => {
+  const makeSvc = (opts: Parameters<typeof createMocks>[0]) => {
+    const mocks = createMocks(opts);
+    const svc = new ScreenerService(
+      mocks.persistence,
+      mocks.stockService,
+      mocks.indicatorCalc,
+    );
+    return { svc, mocks };
+  };
+
+  const limitFilter = () => ({
+    groups: [{ field: 'consecutiveLimitUp' as const, op: '>=' as const, value: 0 }],
+  });
+
+  // --- turnoverRate -------------------------------------------------------
+
+  it('turnoverRate：目录 turnoverratio 直接求值（百分比语义）', async () => {
+    const { svc } = makeSvc({
+      directory: [{ symbol: '600001', name: 'A' }],
+      quoteMap: { '600001': makeQuote('600001', 'A') },
+      turnoverMap: { '600001': 1.1161 },
+    });
+    const res = await svc.evaluate(buildReq({ groups: [] }));
+    expect(res.items[0]!.turnoverRate).toBeCloseTo(1.1161, 4);
+  });
+
+  it('turnoverRate > 5 过滤：高换手命中、低换手与字段缺失排除', async () => {
+    const { svc } = makeSvc({
+      directory: [
+        { symbol: '600001', name: '高换手' },
+        { symbol: '600002', name: '低换手' },
+        { symbol: '600003', name: '无数据' },
+      ],
+      quoteMap: {
+        '600001': makeQuote('600001', '高换手'),
+        '600002': makeQuote('600002', '低换手'),
+        '600003': makeQuote('600003', '无数据'),
+      },
+      turnoverMap: { '600001': 8.2, '600002': 2.4, '600003': null },
+    });
+    const res = await svc.evaluate(
+      buildReq({ groups: [{ field: 'turnoverRate', op: '>', value: 5 }] }),
+    );
+    expect(res.items.map((i) => i.symbol)).toEqual(['600001']);
+  });
+
+  // --- consecutiveLimitUp 阈值表 ------------------------------------------
+
+  it('涨停阈值：主板10% / 创业板20% / 科创板20% / 北交所20% / ST 5%', () => {
+    expect(limitUpThreshold('600001', '主板', 'sh')).toBe(10);
+    expect(limitUpThreshold('000001', '主板', 'sz')).toBe(10);
+    expect(limitUpThreshold('300750', '创业板', 'sz')).toBe(20);
+    expect(limitUpThreshold('688981', '科创板', 'sh')).toBe(20);
+    expect(limitUpThreshold('920009', '北交所', 'bj')).toBe(20);
+    expect(limitUpThreshold('430047', '北交所', 'bj')).toBe(20);
+    expect(limitUpThreshold('600001', 'ST示例', 'sh')).toBe(5);
+  });
+
+  it('主板连续 3 板 → consecutiveLimitUp = 3（端到端过滤 >= 3）', async () => {
+    const prices = [10, 11, 12.1, 13.31]; // 后三日各 +10%
+    const { svc } = makeSvc({
+      directory: [{ symbol: '600001', name: '三连板' }],
+      quoteMap: { '600001': makeQuote('600001', '三连板') },
+      klineMap: { '600001': makeKlineBundle(prices) },
+    });
+    const res = await svc.evaluate(buildReq(limitFilter()));
+    expect(res.items[0]!.consecutiveLimitUp).toBe(3);
+
+    const filtered = await svc.evaluate(
+      buildReq({ groups: [{ field: 'consecutiveLimitUp', op: '>=', value: 3 }] }),
+    );
+    expect(filtered.total).toBe(1);
+  });
+
+  it('创业板 20% 阈值：连续两日 +20% → 2；+10% 不构成涨停', async () => {
+    const prices20 = [10, 12, 14.4];
+    expect(
+      calcConsecutiveLimitUp(makeKlines(prices20), '300750', '创业板', 'sz'),
+    ).toBe(2);
+    const prices10 = [10, 11];
+    expect(
+      calcConsecutiveLimitUp(makeKlines(prices10), '300750', '创业板', 'sz'),
+    ).toBe(0);
+  });
+
+  it('北交所 20% 阈值（market=bj 识别，无需代码前缀规则）', () => {
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 12, 14.4]), '920009', '北交所', 'bj'),
+    ).toBe(2);
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 11]), '920009', '北交所', 'bj'),
+    ).toBe(0);
+  });
+
+  it('非涨停中断 → 从最新日计数，最新日不涨停时为 0', () => {
+    // 前两日涨停，末日仅 +3.3% → 计数归 0
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 11, 12.1, 12.5]), '600001', '主板', 'sh'),
+    ).toBe(0);
+    // 涨停序列中间一日不涨停、末日涨停 → 计数 1（中断后重新起算）
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 11, 11.5, 12.65]), '600001', '主板', 'sh'),
+    ).toBe(1);
+  });
+
+  it('无涨停 → 0', () => {
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 10.2, 10.4]), '600001', '主板', 'sh'),
+    ).toBe(0);
+  });
+
+  it('6 板封顶 5（字段定义 0~5）', () => {
+    const prices = [10, 11, 12.1, 13.31, 14.641, 16.1051, 17.71561];
+    expect(
+      calcConsecutiveLimitUp(makeKlines(prices), '600001', '主板', 'sh'),
+    ).toBe(5);
+  });
+
+  it('ST 股 5% 阈值：连续两日 +5% → 2', () => {
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 10.5, 11.025]), '600001', 'ST示例', 'sh'),
+    ).toBe(2);
+    // 同一代码非 ST 时 +5% 不算涨停
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 10.5]), '600001', '普通', 'sh'),
+    ).toBe(0);
+  });
+
+  it('容差：涨幅 9.98% 算作主板涨停（阈值 10% - 0.3%）', () => {
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 10.998]), '600001', '主板', 'sh'),
+    ).toBe(1);
+    // 低于容差边界（9.6%）不算
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10, 10.96]), '600001', '主板', 'sh'),
+    ).toBe(0);
+  });
+
+  it('K 线不足（0 或 1 根）→ 0 且不报错', async () => {
+    expect(calcConsecutiveLimitUp([], '600001', '主板', 'sh')).toBe(0);
+    expect(
+      calcConsecutiveLimitUp(makeKlines([10]), '600001', '主板', 'sh'),
+    ).toBe(0);
+
+    // 端到端：仅 1 根 K 线
+    const { svc } = makeSvc({
+      directory: [{ symbol: '600001', name: 'A' }],
+      quoteMap: { '600001': makeQuote('600001', 'A') },
+      klineMap: { '600001': makeKlineBundle([10]) },
+    });
+    const res = await svc.evaluate(buildReq(limitFilter()));
+    expect(res.items[0]!.consecutiveLimitUp).toBe(0);
   });
 });

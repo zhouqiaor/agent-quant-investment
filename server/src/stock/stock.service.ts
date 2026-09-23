@@ -152,6 +152,7 @@ export class StockService implements OnApplicationBootstrap {
           pe: r.per != null ? Number(r.per) : null,
           pb: r.pb != null ? Number(r.pb) : null,
           mktcap: r.mktcap != null ? Number(r.mktcap) : null,
+          turnoverratio: r.turnoverratio != null ? Number(r.turnoverratio) : null,
         }))
         .filter((r) => /^\d{6}$/.test(r.symbol) && !!r.name);
       this.persistence.upsertDirectoryBatch(batch);

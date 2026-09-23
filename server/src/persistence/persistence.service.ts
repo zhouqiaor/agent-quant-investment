@@ -225,6 +225,7 @@ export class PersistenceService implements OnModuleInit {
         pe REAL,
         pb REAL,
         mktcap REAL,
+        turnoverratio REAL,
         updatedAt INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_directory_name ON stock_directory(name);
@@ -265,6 +266,13 @@ export class PersistenceService implements OnModuleInit {
       );
       CREATE INDEX IF NOT EXISTS idx_kline_cache_fetched ON kline_cache(fetched_at);
     `);
+
+    // 旧库迁移：stock_directory 补充 turnoverratio 列（已存在则忽略）
+    try {
+      this.db.exec('ALTER TABLE stock_directory ADD COLUMN turnoverratio REAL');
+    } catch {
+      /* 列已存在 */
+    }
   }
 
   // ==================== K 线缓存（5 分钟 TTL，StockService 写入） ====================
@@ -418,18 +426,19 @@ export class PersistenceService implements OnModuleInit {
       pe: number | null;
       pb: number | null;
       mktcap: number | null;
+      turnoverratio: number | null;
     }>,
   ): void {
     if (rows.length === 0) return;
     const stmt = this.db.prepare(
       `INSERT OR REPLACE INTO stock_directory
-       (symbol, name, market, price, changePercent, pe, pb, mktcap, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (symbol, name, market, price, changePercent, pe, pb, mktcap, turnoverratio, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const now = Date.now();
     this.db.transaction((batch: typeof rows) => {
       for (const r of batch) {
-        stmt.run(r.symbol, r.name, r.market, r.price, r.changePercent, r.pe, r.pb, r.mktcap, now);
+        stmt.run(r.symbol, r.name, r.market, r.price, r.changePercent, r.pe, r.pb, r.mktcap, r.turnoverratio, now);
       }
     })(rows);
   }
@@ -449,12 +458,13 @@ export class PersistenceService implements OnModuleInit {
     market: string;
     price: number;
     changePercent: number;
+    turnoverratio: number | null;
   }> {
     const query = q.trim();
     if (!query) {
       const rows = this.db
         .prepare(
-          'SELECT symbol, name, market, price, changePercent FROM stock_directory ORDER BY symbol LIMIT ?',
+          'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory ORDER BY symbol LIMIT ?',
         )
         .all(limit) as Array<{
         symbol: string;
@@ -462,12 +472,13 @@ export class PersistenceService implements OnModuleInit {
         market: string;
         price: number;
         changePercent: number;
+        turnoverratio: number | null;
       }>;
       return rows;
     }
     const byCode = this.db
       .prepare(
-        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE symbol LIKE ? ORDER BY symbol LIMIT ?',
+        'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory WHERE symbol LIKE ? ORDER BY symbol LIMIT ?',
       )
       .all(`${query}%`, limit) as Array<{
       symbol: string;
@@ -475,10 +486,11 @@ export class PersistenceService implements OnModuleInit {
       market: string;
       price: number;
       changePercent: number;
+      turnoverratio: number | null;
     }>;
     const byName = this.db
       .prepare(
-        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE name LIKE ? ORDER BY symbol LIMIT ?',
+        'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory WHERE name LIKE ? ORDER BY symbol LIMIT ?',
       )
       .all(`%${query}%`, limit) as Array<{
       symbol: string;
@@ -486,6 +498,7 @@ export class PersistenceService implements OnModuleInit {
       market: string;
       price: number;
       changePercent: number;
+      turnoverratio: number | null;
     }>;
     const seen = new Set(byCode.map((r) => r.symbol));
     return [...byCode, ...byName.filter((r) => !seen.has(r.symbol))].slice(0, limit);

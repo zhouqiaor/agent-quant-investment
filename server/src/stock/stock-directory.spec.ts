@@ -34,6 +34,8 @@ const makeClistPage = (rows: Array<[prefix: string, code: string, name: string]>
     per: 12.5,
     pb: 1.8,
     mktcap: 500000, // 万元
+    nmc: 300000,
+    turnoverratio: 3.45,
   }));
 
 describe('全量股票目录 + 真实K线', () => {
@@ -117,6 +119,10 @@ describe('全量股票目录 + 真实K线', () => {
     expect(meta!.market).toBe('sz');
     expect(persistence.getDirectoryMeta('920009')!.market).toBe('bj');
     expect(persistence.getDirectoryLastSyncAt()).toBeGreaterThan(0);
+
+    // turnoverratio 随目录同步解析落库
+    const dirRow = persistence.searchDirectory('002378', 10).find((r) => r.symbol === '002378');
+    expect(dirRow!.turnoverratio).toBeCloseTo(3.45, 2);
   });
 
   it('T2 懒刷新：24h 内重复同步跳过网络请求', async () => {

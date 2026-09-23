@@ -2,8 +2,33 @@ import { View, Text, Image } from '@tarojs/components'
 import { useMemo } from 'react'
 import type { IndicatorBundle } from '@/lib/indicators/types'
 import { MA_COLORS } from '@/lib/indicators/types'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { MacdChart } from './macd-chart'
 import { KdjChart } from './kdj-chart'
+
+/**
+ * 单个图表的兜底 UI：灰色背景占位 + "图表加载失败，点此重试"
+ * 点击整块区域即可触发 reset，重新渲染图表。
+ */
+function ChartErrorFallback({
+  height,
+  reset,
+}: {
+  height: number
+  reset: () => void
+}) {
+  return (
+    <View
+      className="w-full flex items-center justify-center bg-slate-800 bg-opacity-60 rounded-lg"
+      style={{ height: `${height + 20}px` }}
+      onClick={reset}
+    >
+      <Text className="block text-sm text-slate-400">
+        图表加载失败，点此重试
+      </Text>
+    </View>
+  )
+}
 
 export interface Candle {
   date: string
@@ -283,64 +308,68 @@ export function CandleChart({
   const display = data[displayIdx ?? data.length - 1]
 
   return (
-    <View className="w-full">
-      {/* 顶部 OHLC 信息 */}
-      <View className="flex justify-between items-center mb-2 px-1">
-        <View className="flex gap-3">
-          <Text className="block text-xs text-slate-400">
-            开 <Text className="text-slate-200">{display.open.toFixed(2)}</Text>
-          </Text>
-          <Text className="block text-xs text-slate-400">
-            高 <Text className="text-red-400">{display.high.toFixed(2)}</Text>
-          </Text>
-          <Text className="block text-xs text-slate-400">
-            低 <Text className="text-green-400">{display.low.toFixed(2)}</Text>
-          </Text>
-          <Text className="block text-xs text-slate-400">
-            收 <Text className={display.close >= display.open ? 'text-red-400' : 'text-green-400'}>{display.close.toFixed(2)}</Text>
-          </Text>
+    <ErrorBoundary
+      fallback={(_err, reset) => <ChartErrorFallback height={height} reset={reset} />}
+    >
+      <View className="w-full">
+        {/* 顶部 OHLC 信息 */}
+        <View className="flex justify-between items-center mb-2 px-1">
+          <View className="flex gap-3">
+            <Text className="block text-xs text-slate-400">
+              开 <Text className="text-slate-200">{display.open.toFixed(2)}</Text>
+            </Text>
+            <Text className="block text-xs text-slate-400">
+              高 <Text className="text-red-400">{display.high.toFixed(2)}</Text>
+            </Text>
+            <Text className="block text-xs text-slate-400">
+              低 <Text className="text-green-400">{display.low.toFixed(2)}</Text>
+            </Text>
+            <Text className="block text-xs text-slate-400">
+              收 <Text className={display.close >= display.open ? 'text-red-400' : 'text-green-400'}>{display.close.toFixed(2)}</Text>
+            </Text>
+          </View>
+          <Text className="block text-xs text-slate-500">{display.date}</Text>
         </View>
-        <Text className="block text-xs text-slate-500">{display.date}</Text>
-      </View>
 
-      {/* 周期切换 */}
-      {periods && period && onPeriodChange && (
-        <View className="flex justify-end gap-1 mb-2">
-          {periods.map(p => (
-            <View
-              key={p.value}
-              className={`px-2 py-1 rounded text-xs ${
-                period === p.value
-                  ? 'bg-slate-700 text-slate-100'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-              onClick={() => onPeriodChange(p.value)}
-            >
-              <Text className="block">{p.label}</Text>
-            </View>
-          ))}
+        {/* 周期切换 */}
+        {periods && period && onPeriodChange && (
+          <View className="flex justify-end gap-1 mb-2">
+            {periods.map(p => (
+              <View
+                key={p.value}
+                className={`px-2 py-1 rounded text-xs ${
+                  period === p.value
+                    ? 'bg-slate-700 text-slate-100'
+                    : 'bg-slate-800 text-slate-400'
+                }`}
+                onClick={() => onPeriodChange(p.value)}
+              >
+                <Text className="block">{p.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* K线主体 */}
+        <View className="w-full overflow-hidden rounded-lg bg-slate-900 bg-opacity-50">
+          <Image
+            src={svgDataUrl}
+            className="w-full block"
+            style={{ height: `${height}px` }}
+            mode="widthFix"
+          />
         </View>
-      )}
 
-      {/* K线主体 */}
-      <View className="w-full overflow-hidden rounded-lg bg-slate-900 bg-opacity-50">
-        <Image
-          src={svgDataUrl}
-          className="w-full block"
-          style={{ height: `${height}px` }}
-          mode="widthFix"
-        />
+        {/* MACD 副图 */}
+        {showMacd && indicators?.macd && (
+          <MacdChart data={indicators.macd} height={macdHeight} redUp={redUp} />
+        )}
+
+        {/* KDJ 副图 */}
+        {showKdj && indicators?.kdj && (
+          <KdjChart data={indicators.kdj} height={kdjHeight} />
+        )}
       </View>
-
-      {/* MACD 副图 */}
-      {showMacd && indicators?.macd && (
-        <MacdChart data={indicators.macd} height={macdHeight} redUp={redUp} />
-      )}
-
-      {/* KDJ 副图 */}
-      {showKdj && indicators?.kdj && (
-        <KdjChart data={indicators.kdj} height={kdjHeight} />
-      )}
-    </View>
+    </ErrorBoundary>
   )
 }

@@ -11,6 +11,8 @@ export default typeof defineAppConfig === 'function'
       'pages/trades/index',
       'pages/position/index',
       'pages/notifications/index',
+      'pages/screener/index',
+      'pages/indicator-settings/index',
       'pages/profile/index'
     ],
     window: {
@@ -65,6 +67,8 @@ export default typeof defineAppConfig === 'function'
       'pages/trades/index',
       'pages/position/index',
       'pages/notifications/index',
+      'pages/screener/index',
+      'pages/indicator-settings/index',
       'pages/profile/index'
     ],
     window: {

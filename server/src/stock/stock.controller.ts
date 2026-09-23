@@ -55,10 +55,42 @@ export class StockController {
     @Query('period') period: string = 'daily',
     @Query('limit') limit: string = '60',
     @Query('withIndicators') withIndicators: string = 'false',
+    @Query('maPeriods') maPeriods?: string,
+    @Query('macdFast') macdFast?: string,
+    @Query('macdSlow') macdSlow?: string,
+    @Query('macdSignal') macdSignal?: string,
+    @Query('bollPeriod') bollPeriod?: string,
+    @Query('bollK') bollK?: string,
+    @Query('kdjN') kdjN?: string,
+    @Query('kdjM1') kdjM1?: string,
+    @Query('kdjM2') kdjM2?: string,
   ) {
     const parsedLimit = parseInt(limit) || 60;
+    const hasCustomIndicator =
+      maPeriods !== undefined ||
+      macdFast !== undefined ||
+      macdSlow !== undefined ||
+      macdSignal !== undefined ||
+      bollPeriod !== undefined ||
+      bollK !== undefined ||
+      kdjN !== undefined ||
+      kdjM1 !== undefined ||
+      kdjM2 !== undefined;
     if (withIndicators === 'true' || withIndicators === '1') {
-      const data = await this.stockService.getKlineBundle(symbol, period, parsedLimit);
+      const config = hasCustomIndicator
+        ? this.stockService.buildIndicatorConfigFromQuery({
+            maPeriods,
+            macdFast,
+            macdSlow,
+            macdSignal,
+            bollPeriod,
+            bollK,
+            kdjN,
+            kdjM1,
+            kdjM2,
+          })
+        : undefined;
+      const data = await this.stockService.getKlineBundle(symbol, period, parsedLimit, config);
       return { code: 200, msg: 'success', data };
     }
     const data = await this.stockService.getKlineData(symbol, period, parsedLimit);

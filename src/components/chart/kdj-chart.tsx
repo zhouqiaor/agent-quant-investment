@@ -1,6 +1,27 @@
-import { View, Image } from '@tarojs/components'
+import { View, Image, Text } from '@tarojs/components'
 import { useMemo } from 'react'
 import type { KdjResult } from '@/lib/indicators/types'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
+
+function ChartErrorFallback({
+  height,
+  reset,
+}: {
+  height: number
+  reset: () => void
+}) {
+  return (
+    <View
+      className="w-full flex items-center justify-center bg-slate-800 bg-opacity-60 rounded-lg"
+      style={{ height: `${height}px` }}
+      onClick={reset}
+    >
+      <Text className="block text-sm text-slate-400">
+        图表加载失败，点此重试
+      </Text>
+    </View>
+  )
+}
 
 interface KdjChartProps {
   data: KdjResult
@@ -71,8 +92,12 @@ export function KdjChart({ data, width = 640, height = 60 }: KdjChartProps) {
 
   const svgDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`
   return (
-    <View className="w-full overflow-hidden bg-slate-900 bg-opacity-30" style={{ height: `${height}px` }}>
-      <Image src={svgDataUrl} className="w-full block" style={{ height: `${height}px` }} mode="widthFix" />
-    </View>
+    <ErrorBoundary
+      fallback={(_err, reset) => <ChartErrorFallback height={height} reset={reset} />}
+    >
+      <View className="w-full overflow-hidden bg-slate-900 bg-opacity-30" style={{ height: `${height}px` }}>
+        <Image src={svgDataUrl} className="w-full block" style={{ height: `${height}px` }} mode="widthFix" />
+      </View>
+    </ErrorBoundary>
   )
 }

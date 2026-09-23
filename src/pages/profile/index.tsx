@@ -9,6 +9,8 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { useAnimatedNumber } from '@/lib/use-animated-number'
+import { useColorScheme } from '@/lib/use-color-scheme'
 import {
   Wallet,
   TrendingUp,
@@ -20,6 +22,10 @@ import {
   Bell,
   TriangleAlert,
   RotateCcw,
+  Sun,
+  Moon,
+  Monitor,
+  Check,
 } from 'lucide-react-taro'
 
 interface PositionDetail {
@@ -68,12 +74,40 @@ const ProfilePage = () => {
   })
   const [notifyEnabled, setNotifyEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
+  const { preference: colorPreference, setScheme: setColorScheme } = useColorScheme()
+  const [overview, setOverview] = useState<{
+    totalAssets: number
+    totalPnl: number
+    totalPnlRate: number
+  }>({ totalAssets: 0, totalPnl: 0, totalPnlRate: 0 })
+
+  // 总资产 / 总盈亏 / 总盈亏率 滚动动画
+  const animatedTotalAssets = useAnimatedNumber(overview.totalAssets)
+  const animatedTotalPnl = useAnimatedNumber(overview.totalPnl)
+  const animatedTotalPnlRate = useAnimatedNumber(overview.totalPnlRate)
 
   useEffect(() => {
     loadPositions()
     loadTrades()
     loadRiskSettings()
+    loadOverview()
   }, [])
+
+  const loadOverview = async () => {
+    try {
+      const res = await Network.request({ url: '/api/assets/overview' })
+      const data = res.data?.data
+      if (data) {
+        setOverview({
+          totalAssets: data.totalAssets ?? 0,
+          totalPnl: data.totalPnl ?? 0,
+          totalPnlRate: data.totalPnlRate ?? 0,
+        })
+      }
+    } catch (e) {
+      console.error('loadOverview error:', e)
+    }
+  }
 
   const loadPositions = async () => {
     try {
@@ -148,6 +182,43 @@ const ProfilePage = () => {
         <TabsContent value="positions" className="flex-1">
           <ScrollView scrollY className="flex-1 smooth-scroll hide-scrollbar">
             <View className="px-4 pb-20 gap-3 flex flex-col">
+              {/* 总资产概览 */}
+              <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 mt-3">
+                <CardContent className="p-4">
+                  <View className="flex flex-col gap-2">
+                    <Text className="block text-xs text-slate-400">总资产</Text>
+                    <Text className="block text-3xl font-bold text-slate-100 tabular-nums">
+                      ¥{animatedTotalAssets.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                    <Separator className="my-2 bg-slate-700" />
+                    <View className="flex flex-row gap-4">
+                      <View className="flex-1">
+                        <Text className="block text-xs text-slate-400">总盈亏</Text>
+                        <Text
+                          className={`block text-base font-semibold tabular-nums mt-1 ${
+                            animatedTotalPnl >= 0 ? 'text-green-500' : 'text-red-500'
+                          }`}
+                        >
+                          {animatedTotalPnl >= 0 ? '+' : ''}
+                          {animatedTotalPnl.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text className="block text-xs text-slate-400">总盈亏率</Text>
+                        <Text
+                          className={`block text-base font-semibold tabular-nums mt-1 ${
+                            animatedTotalPnlRate >= 0 ? 'text-green-500' : 'text-red-500'
+                          }`}
+                        >
+                          {animatedTotalPnlRate >= 0 ? '+' : ''}
+                          {animatedTotalPnlRate.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </CardContent>
+              </Card>
+
               {loading ? (
                 <View className="flex items-center justify-center py-12">
                   <Text className="block text-sm text-slate-500">加载中...</Text>
@@ -445,6 +516,100 @@ const ProfilePage = () => {
                       checked={notifyEnabled}
                       onCheckedChange={setNotifyEnabled}
                     />
+                  </View>
+                </CardContent>
+              </Card>
+
+              {/* 外观设置 */}
+              <Card className="bg-slate-800 border-slate-700">
+                <CardContent className="p-4">
+                  <View className="flex flex-row items-center gap-2 mb-3">
+                    <Sun size={16} color="#a3e635" />
+                    <Text className="block text-sm font-semibold text-slate-100">外观设置</Text>
+                  </View>
+                  <Text className="block text-xs text-slate-500 mb-3">
+                    切换整体配色，默认跟随系统主题
+                  </Text>
+
+                  {/* 跟随系统 */}
+                  <View
+                    className={`flex flex-row items-center justify-between rounded-lg px-3 py-3 mb-2 border ${
+                      colorPreference === 'auto'
+                        ? 'border-emerald-500 bg-emerald-500 bg-opacity-10'
+                        : 'border-slate-700 bg-slate-900'
+                    }`}
+                    onClick={() => setColorScheme('auto')}
+                  >
+                    <View className="flex flex-row items-center gap-2">
+                      <Monitor size={16} color={colorPreference === 'auto' ? '#10b981' : '#94a3b8'} />
+                      <View className="flex flex-col gap-1">
+                        <Text
+                          className={`block text-sm ${
+                            colorPreference === 'auto' ? 'text-emerald-400' : 'text-slate-100'
+                          }`}
+                        >
+                          跟随系统
+                        </Text>
+                        <Text className="block text-xs text-slate-500">
+                          根据设备系统设置自动切换
+                        </Text>
+                      </View>
+                    </View>
+                    {colorPreference === 'auto' && <Check size={16} color="#10b981" />}
+                  </View>
+
+                  {/* 浅色 */}
+                  <View
+                    className={`flex flex-row items-center justify-between rounded-lg px-3 py-3 mb-2 border ${
+                      colorPreference === 'light'
+                        ? 'border-emerald-500 bg-emerald-500 bg-opacity-10'
+                        : 'border-slate-700 bg-slate-900'
+                    }`}
+                    onClick={() => setColorScheme('light')}
+                  >
+                    <View className="flex flex-row items-center gap-2">
+                      <Sun size={16} color={colorPreference === 'light' ? '#10b981' : '#94a3b8'} />
+                      <View className="flex flex-col gap-1">
+                        <Text
+                          className={`block text-sm ${
+                            colorPreference === 'light' ? 'text-emerald-400' : 'text-slate-100'
+                          }`}
+                        >
+                          浅色
+                        </Text>
+                        <Text className="block text-xs text-slate-500">
+                          始终使用浅色背景
+                        </Text>
+                      </View>
+                    </View>
+                    {colorPreference === 'light' && <Check size={16} color="#10b981" />}
+                  </View>
+
+                  {/* 深色 */}
+                  <View
+                    className={`flex flex-row items-center justify-between rounded-lg px-3 py-3 border ${
+                      colorPreference === 'dark'
+                        ? 'border-emerald-500 bg-emerald-500 bg-opacity-10'
+                        : 'border-slate-700 bg-slate-900'
+                    }`}
+                    onClick={() => setColorScheme('dark')}
+                  >
+                    <View className="flex flex-row items-center gap-2">
+                      <Moon size={16} color={colorPreference === 'dark' ? '#10b981' : '#94a3b8'} />
+                      <View className="flex flex-col gap-1">
+                        <Text
+                          className={`block text-sm ${
+                            colorPreference === 'dark' ? 'text-emerald-400' : 'text-slate-100'
+                          }`}
+                        >
+                          深色
+                        </Text>
+                        <Text className="block text-xs text-slate-500">
+                          始终使用深色背景（推荐夜间使用）
+                        </Text>
+                      </View>
+                    </View>
+                    {colorPreference === 'dark' && <Check size={16} color="#10b981" />}
                   </View>
                 </CardContent>
               </Card>

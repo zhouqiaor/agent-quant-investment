@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PersistenceService } from '@/persistence/persistence.service';
-import { IndicatorCalcService, IndicatorBundle } from '@/indicators';
+import {
+  DEFAULT_INDICATOR_CONFIG,
+  IndicatorBundle,
+  IndicatorCalcService,
+  IndicatorConfig,
+} from '@/indicators';
 import * as iconv from 'iconv-lite';
 
 export interface StockInfo {
@@ -75,6 +80,10 @@ export class StockService implements OnApplicationBootstrap {
   private realtimeCache: Map<string, StockInfo> = new Map();
   private lastFetchTime = 0;
   private readonly CACHE_TTL = 5000; // 5 seconds cache
+
+  // K 线缓存：5 分钟 SQLite TTL（PersistenceService 落盘，进程内 in-flight Map 合并并发请求）
+  private readonly KLINE_CACHE_TTL = 5 * 60 * 1000;
+  private klineInFlight: Map<string, Promise<KlineWithIndicators>> = new Map();
 
   private readonly DIRECTORY_TTL = 24 * 60 * 60 * 1000; // 目录懒刷新周期
   private syncInFlight: Promise<{ count: number; skipped: boolean; durationMs: number }> | null =
@@ -520,11 +529,73 @@ export class StockService implements OnApplicationBootstrap {
   /**
    * Get K-line + 技术指标（含 MA/MACD/BOLL/KDJ）
    * 与 getKlineData 行为一致，外加 indicators 字段
+   *
+   * 缓存策略：
+   *  1) SQLite 命中 + 5 分钟内 → 直接返回（跳过 Sina fetch）
+   *  2) 同 (symbol, period, limit) 的并发请求合并为一个 in-flight Promise
+   *  3) fetch 成功后写入 SQLite；fetch 失败不写缓存，避免污染
+   *
+   * indicatorConfig?: 可选自定义指标配置（用于前端 indicator_settings 透传）。
+   * 缺省或非法 → 回退 DEFAULT_INDICATOR_CONFIG。
    */
   async getKlineBundle(
     symbol: string,
     period: string = 'daily',
     limit: number = 60,
+    indicatorConfig?: IndicatorConfig,
+  ): Promise<KlineWithIndicators> {
+    const normalizedLimit = Math.max(5, Math.min(limit, 250));
+    const normalizedConfig = this.normalizeIndicatorConfig(indicatorConfig);
+
+    // 1) 命中缓存（5 分钟 TTL 内）—— 仅当使用默认 config 时才读缓存（避免配置漂移）
+    if (indicatorConfig === undefined) {
+      const cached = this.persistence.getKlineCache(symbol, period, normalizedLimit);
+      if (cached && Date.now() - cached.fetched_at < this.KLINE_CACHE_TTL) {
+        return {
+          klines: JSON.parse(cached.payload) as KlineData[],
+          indicators: cached.indicators ? (JSON.parse(cached.indicators) as IndicatorBundle) : null,
+        };
+      }
+    }
+
+    // 2) 同 key 并发合并：in-flight Promise 复用
+    const inFlightKey = `${symbol}|${period}|${normalizedLimit}`;
+    const existing = this.klineInFlight.get(inFlightKey);
+    if (existing) return existing;
+
+    const fetchPromise = this.fetchAndCacheKline(symbol, period, normalizedLimit, normalizedConfig).finally(() => {
+      this.klineInFlight.delete(inFlightKey);
+    });
+    this.klineInFlight.set(inFlightKey, fetchPromise);
+    return fetchPromise;
+  }
+
+  /** 拉取并写缓存：失败时绝不写库 */
+  private async fetchAndCacheKline(
+    symbol: string,
+    period: string,
+    limit: number,
+    config: IndicatorConfig,
+  ): Promise<KlineWithIndicators> {
+    const result = await this.fetchKlineFromSina(symbol, period, limit, config);
+    // 失败（空 klines）不写缓存，避免污染下次请求
+    if (result.klines.length === 0) return result;
+    this.persistence.setKlineCache(
+      symbol,
+      period,
+      limit,
+      JSON.stringify(result.klines),
+      result.indicators ? JSON.stringify(result.indicators) : null,
+    );
+    return result;
+  }
+
+  /** 纯 Sina 拉取：保持与既有实现一致，便于旧测试/单测复用 */
+  private async fetchKlineFromSina(
+    symbol: string,
+    period: string,
+    limit: number,
+    config: IndicatorConfig = DEFAULT_INDICATOR_CONFIG,
   ): Promise<KlineWithIndicators> {
     const code = this.getStockCode(symbol);
     const scale = period === 'weekly' ? 1680 : period === 'monthly' ? 7200 : 240;
@@ -553,12 +624,144 @@ export class StockService implements OnApplicationBootstrap {
         close: Number(k.close),
         volume: Number(k.volume) || 0,
       }));
-      const indicators = klines.length > 0 ? this.indicatorCalc.computeAll(klines) : null;
+      const indicators = klines.length > 0 ? this.indicatorCalc.computeAll(klines, config) : null;
       return { klines, indicators };
     } catch (error) {
       this.logger.error(`Failed to fetch kline for ${symbol}: ${error.message}`);
       return { klines: [], indicators: null };
     }
+  }
+
+  /**
+   * 规范化指标配置：缺省/非法 → 回退 DEFAULT_INDICATOR_CONFIG
+   *
+   * 校验规则（与需求一致）：
+   * - maPeriods：每个元素必须是 1..MAX 的正整数，去重后按升序
+   * - macd.fast < macd.slow，三个参数 1..MAX
+   * - boll.period 1..MAX，boll.k 0.1..5（≤200 上限约束更宽，这里收严避免过宽的轨带）
+   * - kdj.{n,m1,m2} 1..MAX
+   *
+   * 任何校验失败抛出 BadRequestException，由 controller 捕获返回 400
+   */
+  private normalizeIndicatorConfig(input: unknown): IndicatorConfig {
+    if (!input || typeof input !== 'object') return DEFAULT_INDICATOR_CONFIG;
+    const cfg = input as Partial<IndicatorConfig>;
+
+    // MA 周期
+    let maPeriods: number[] = DEFAULT_INDICATOR_CONFIG.maPeriods;
+    if (Array.isArray(cfg.maPeriods)) {
+      const cleaned: number[] = [];
+      for (const p of cfg.maPeriods) {
+        if (typeof p !== 'number' || !Number.isInteger(p) || p < 1 || p > 200) {
+          throw new BadRequestException(`maPeriods 非法：每个元素必须是 1..200 的正整数，收到 ${String(p)}`);
+        }
+        if (!cleaned.includes(p)) cleaned.push(p);
+      }
+      cleaned.sort((a, b) => a - b);
+      if (cleaned.length === 0) {
+        throw new BadRequestException('maPeriods 不能为空');
+      }
+      maPeriods = cleaned;
+    }
+
+    // MACD
+    let macd = DEFAULT_INDICATOR_CONFIG.macd;
+    if (cfg.macd && typeof cfg.macd === 'object') {
+      const { fast, slow, signal } = cfg.macd as { fast?: number; slow?: number; signal?: number };
+      if (
+        typeof fast !== 'number' || !Number.isInteger(fast) || fast < 1 || fast > 200 ||
+        typeof slow !== 'number' || !Number.isInteger(slow) || slow < 1 || slow > 200 ||
+        typeof signal !== 'number' || !Number.isInteger(signal) || signal < 1 || signal > 200
+      ) {
+        throw new BadRequestException(`macd 参数非法（必须 1..200 正整数）`);
+      }
+      if (fast >= slow) {
+        throw new BadRequestException(`macd.fast (${fast}) 必须 < slow (${slow})`);
+      }
+      macd = { fast, slow, signal };
+    }
+
+    // BOLL
+    let boll = DEFAULT_INDICATOR_CONFIG.boll;
+    if (cfg.boll && typeof cfg.boll === 'object') {
+      const { period, k } = cfg.boll as { period?: number; k?: number };
+      if (
+        typeof period !== 'number' || !Number.isInteger(period) || period < 1 || period > 200
+      ) {
+        throw new BadRequestException(`boll.period 非法（必须 1..200 正整数）`);
+      }
+      if (typeof k !== 'number' || !Number.isFinite(k) || k < 0.1 || k > 5) {
+        throw new BadRequestException(`boll.k 非法（必须 0.1..5 的有限数）`);
+      }
+      boll = { period, k };
+    }
+
+    // KDJ
+    let kdj = DEFAULT_INDICATOR_CONFIG.kdj;
+    if (cfg.kdj && typeof cfg.kdj === 'object') {
+      const { n, m1, m2 } = cfg.kdj as { n?: number; m1?: number; m2?: number };
+      if (
+        typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 200 ||
+        typeof m1 !== 'number' || !Number.isInteger(m1) || m1 < 1 || m1 > 200 ||
+        typeof m2 !== 'number' || !Number.isInteger(m2) || m2 < 1 || m2 > 200
+      ) {
+        throw new BadRequestException(`kdj 参数非法（必须 1..200 正整数）`);
+      }
+      kdj = { n, m1, m2 };
+    }
+
+    return { maPeriods, macd, boll, kdj };
+  }
+
+  /**
+   * 从 Controller 查询参数构建 IndicatorConfig。任意字段缺省 → 用默认值。
+   * 非法值抛出 BadRequestException。
+   */
+  buildIndicatorConfigFromQuery(q: {
+    maPeriods?: string;
+    macdFast?: string;
+    macdSlow?: string;
+    macdSignal?: string;
+    bollPeriod?: string;
+    bollK?: string;
+    kdjN?: string;
+    kdjM1?: string;
+    kdjM2?: string;
+  }): IndicatorConfig {
+    const cfg: Partial<IndicatorConfig> = {};
+
+    if (q.maPeriods !== undefined && q.maPeriods !== '') {
+      cfg.maPeriods = q.maPeriods
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => Number(s));
+    }
+    if (
+      q.macdFast !== undefined ||
+      q.macdSlow !== undefined ||
+      q.macdSignal !== undefined
+    ) {
+      cfg.macd = {
+        fast: q.macdFast !== undefined ? Number(q.macdFast) : DEFAULT_INDICATOR_CONFIG.macd.fast,
+        slow: q.macdSlow !== undefined ? Number(q.macdSlow) : DEFAULT_INDICATOR_CONFIG.macd.slow,
+        signal: q.macdSignal !== undefined ? Number(q.macdSignal) : DEFAULT_INDICATOR_CONFIG.macd.signal,
+      };
+    }
+    if (q.bollPeriod !== undefined || q.bollK !== undefined) {
+      cfg.boll = {
+        period: q.bollPeriod !== undefined ? Number(q.bollPeriod) : DEFAULT_INDICATOR_CONFIG.boll.period,
+        k: q.bollK !== undefined ? Number(q.bollK) : DEFAULT_INDICATOR_CONFIG.boll.k,
+      };
+    }
+    if (q.kdjN !== undefined || q.kdjM1 !== undefined || q.kdjM2 !== undefined) {
+      cfg.kdj = {
+        n: q.kdjN !== undefined ? Number(q.kdjN) : DEFAULT_INDICATOR_CONFIG.kdj.n,
+        m1: q.kdjM1 !== undefined ? Number(q.kdjM1) : DEFAULT_INDICATOR_CONFIG.kdj.m1,
+        m2: q.kdjM2 !== undefined ? Number(q.kdjM2) : DEFAULT_INDICATOR_CONFIG.kdj.m2,
+      };
+    }
+    return this.normalizeIndicatorConfig(cfg);
   }
 
   /**

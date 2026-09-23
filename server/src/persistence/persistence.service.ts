@@ -88,6 +88,7 @@ export interface NotificationRecord {
   title?: string;
   content?: string;
   symbol?: string;
+  signalId?: string;
   signalType?: string;
   price?: number;
   source?: string;
@@ -244,6 +245,7 @@ export class PersistenceService implements OnModuleInit {
         title TEXT,
         content TEXT,
         symbol TEXT,
+        signalId TEXT,
         signalType TEXT,
         price REAL,
         source TEXT,
@@ -513,18 +515,19 @@ export class PersistenceService implements OnModuleInit {
   }
 
   // ==================== 通知 ====================
-  saveNotification(record: NotificationRecord & { id?: string }): string {
+  saveNotification(record: NotificationRecord & { id?: string; signalId?: string }): string {
     const id = record.id || `ntf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.db
       .prepare(
-        `INSERT INTO notifications (id, title, content, symbol, signalType, price, source, read, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO notifications (id, title, content, symbol, signalId, signalType, price, source, read, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
         record.title || '',
         record.content || '',
         record.symbol || '',
+        (record as any).signalId || '',
         record.signalType || '',
         record.price ?? null,
         record.source || '',
@@ -558,6 +561,7 @@ export class PersistenceService implements OnModuleInit {
       title: r.title,
       content: r.content,
       symbol: r.symbol,
+      signalId: r.signalId,
       signalType: r.signalType,
       price: r.price,
       source: r.source,

@@ -414,7 +414,10 @@ const IndexPage = () => {
         )}
 
         {/* 信号与通知 */}
-        <Card className="bg-slate-800 border-slate-700">
+        <Card
+          className="bg-slate-800 border-slate-700"
+          onClick={() => Taro.navigateTo({ url: '/pages/notifications/index' })}
+        >
           <CardContent className="p-4">
             <View className="flex flex-col gap-3">
               <View className="flex flex-row items-center gap-2">
@@ -425,6 +428,8 @@ const IndexPage = () => {
                     <Text className="block text-[10px]">自动交易开启</Text>
                   </Badge>
                 )}
+                <View className="flex-1" />
+                <Text className="block text-xs text-slate-500">查看全部 →</Text>
               </View>
               {notifications.length === 0 ? (
                 <View className="bg-slate-900 rounded-lg p-4">

@@ -5,6 +5,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { StockService } from '@/stock/stock.service';
 import { PersistenceService } from '@/persistence/persistence.service';
+import { IndicatorCalcService } from '@/indicators';
 
 describe('StockService - 自定义股票', () => {
   let service: StockService;
@@ -30,7 +31,7 @@ describe('StockService - 自定义股票', () => {
     dbPath = `/tmp/test-custom-stock-${Date.now()}-${Math.floor(Math.random() * 1e6)}.db`;
     persistence = new PersistenceService(dbPath);
     persistence.init();
-    service = new StockService(persistence);
+    service = new StockService(persistence, new IndicatorCalcService());
   });
 
   afterEach(() => {
@@ -103,7 +104,7 @@ describe('StockService - 自定义股票', () => {
     await service.addCustomStock('600036', '招行持久化');
     const persistence2 = new PersistenceService(dbPath);
     persistence2.init();
-    const service2 = new StockService(persistence2);
+    const service2 = new StockService(persistence2, new IndicatorCalcService());
     const list = service2.listCustomStocks();
     expect(list.length).toBe(1);
     expect(list[0].name).toBe('招行持久化');

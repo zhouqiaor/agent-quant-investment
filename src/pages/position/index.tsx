@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { TrendingUp, TrendingDown, DollarSign, ChartPie } from 'lucide-react-taro'
+import type { IndicatorBundle } from '@/lib/indicators/types'
 
 interface PositionDetail {
   symbol: string
@@ -35,20 +36,31 @@ export default function PositionPage() {
   const [buyPrice, setBuyPrice] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [kline, setKline] = useState<any[]>([])
+  const [klineIndicators, setKlineIndicators] = useState<IndicatorBundle | undefined>(undefined)
   const [klinePeriod, setKlinePeriod] = useState<'30' | '60' | '120'>('30')
 
   const loadKline = useCallback(async () => {
     try {
       const res = await Network.request({
         url: '/api/stock/kline',
-        data: { symbol, period: 'daily', limit: klinePeriod },
+        data: { symbol, period: 'daily', limit: klinePeriod, withIndicators: true },
       })
-      const list = res.data?.data || []
-      // 最近 N 根
-      setKline(list.slice(-parseInt(klinePeriod)))
+      const payload = res.data?.data
+      // 新接口：{ klines: [...], indicators: {...} }；旧接口：纯数组
+      if (payload && Array.isArray(payload.klines)) {
+        setKline(payload.klines)
+        setKlineIndicators(payload.indicators ?? undefined)
+      } else if (Array.isArray(payload)) {
+        setKline(payload)
+        setKlineIndicators(undefined)
+      } else {
+        setKline([])
+        setKlineIndicators(undefined)
+      }
     } catch (e) {
       console.error('[position] kline error', e)
       setKline([])
+      setKlineIndicators(undefined)
     }
   }, [symbol, klinePeriod])
 
@@ -227,15 +239,16 @@ export default function PositionPage() {
             </View>
             {kline.length > 0 ? (
               <CandleChart
-                // @ts-expect-error 数据字段类型兼容
                 data={kline.map((k: any) => ({
-                  time: k.date?.slice(5) || k.day?.slice(5) || '',
+                  date: k.date || k.day || '',
                   open: parseFloat(k.open),
                   high: parseFloat(k.high),
                   low: parseFloat(k.low),
                   close: parseFloat(k.close),
                 }))}
                 costPrice={position?.avgCost}
+                currentPrice={position?.currentPrice}
+                indicators={klineIndicators}
                 height={220}
               />
             ) : (

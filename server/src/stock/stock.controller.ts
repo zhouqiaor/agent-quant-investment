@@ -54,8 +54,14 @@ export class StockController {
     @Query('symbol') symbol: string,
     @Query('period') period: string = 'daily',
     @Query('limit') limit: string = '60',
+    @Query('withIndicators') withIndicators: string = 'false',
   ) {
-    const data = await this.stockService.getKlineData(symbol, period, parseInt(limit) || 60);
+    const parsedLimit = parseInt(limit) || 60;
+    if (withIndicators === 'true' || withIndicators === '1') {
+      const data = await this.stockService.getKlineBundle(symbol, period, parsedLimit);
+      return { code: 200, msg: 'success', data };
+    }
+    const data = await this.stockService.getKlineData(symbol, period, parsedLimit);
     return { code: 200, msg: 'success', data };
   }
 

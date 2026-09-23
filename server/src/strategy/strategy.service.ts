@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { IndicatorCalcService, IndicatorBundle } from '@/indicators';
+import type { KlineData } from '@/stock/stock.service';
 
 export interface Strategy {
   id: string;
@@ -60,6 +62,7 @@ export interface MonitorSignal {
 
 @Injectable()
 export class StrategyService {
+  constructor(private readonly indicatorCalc: IndicatorCalcService) {}
   private strategies: Strategy[] = [
     {
       id: 's1',
@@ -304,5 +307,35 @@ export class StrategyService {
 
   getMonitorSignals(limit = 10): MonitorSignal[] {
     return this.monitorSignals.slice(0, limit);
+  }
+
+  /**
+   * 信号原因增强：在原有 reason 基础上，附加最新一日的指标信号标签（MACD金叉/KDJ超卖等）
+   *
+   * - 无 klines：原样返回 baseReason（向后兼容）
+   * - 有 klines：计算 indicators，识别最新一日的 cross/break/extreme，附加为 " · 标签"
+   *
+   * 注意：本方法为公开 API，便于外部（如 LivePnlService）调用以丰富已生成的信号
+   */
+  enrichSignalReason(baseReason: string, klines: KlineData[] | undefined): string {
+    if (!klines || klines.length === 0) return baseReason;
+    const indicators: IndicatorBundle = this.indicatorCalc.computeAll(klines);
+    const last = klines.length - 1;
+    const tags: string[] = [];
+
+    const macdCross = indicators.macd.crosses.find((c) => c.index === last);
+    if (macdCross?.type === 'golden') tags.push('MACD金叉');
+    if (macdCross?.type === 'death') tags.push('MACD死叉');
+
+    const bollBreak = indicators.boll.breaks.find((b) => b.index === last);
+    if (bollBreak?.type === 'upper') tags.push('BOLL突破上轨');
+    if (bollBreak?.type === 'lower') tags.push('BOLL跌破下轨');
+
+    const kdjExtreme = indicators.kdj.extremes.find((k) => k.index === last);
+    if (kdjExtreme?.type === 'oversold') tags.push('KDJ超卖');
+    if (kdjExtreme?.type === 'overbought') tags.push('KDJ超买');
+
+    if (tags.length === 0) return baseReason;
+    return `${baseReason} · ${tags.join(' · ')}`;
   }
 }

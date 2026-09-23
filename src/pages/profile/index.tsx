@@ -403,6 +403,31 @@ const ProfilePage = () => {
                 </CardContent>
               </Card>
 
+              {/* 通知中心入口 */}
+              <Card
+                className="bg-slate-800 border-slate-700"
+                onClick={() => Taro.navigateTo({ url: '/pages/notifications/index' })}
+              >
+                <CardContent className="p-4">
+                  <View className="flex flex-row items-center justify-between">
+                    <View className="flex flex-row items-center gap-2">
+                      <Bell size={16} color="#facc15" />
+                      <View className="flex flex-col gap-1">
+                        <Text className="block text-sm text-slate-100">通知中心</Text>
+                        <Text className="block text-xs text-slate-500">
+                          查看 Agent 信号通知
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="flex flex-row items-center gap-2">
+                      <Badge className="bg-emerald-500 bg-opacity-20 text-emerald-400">
+                        <Text className="block text-xs">→</Text>
+                      </Badge>
+                    </View>
+                  </View>
+                </CardContent>
+              </Card>
+
               {/* 通知设置 */}
               <Card className="bg-slate-800 border-slate-700">
                 <CardContent className="p-4">

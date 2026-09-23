@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PersistenceService } from '@/persistence/persistence.service';
+import { IndicatorCalcService, IndicatorBundle } from '@/indicators';
 import * as iconv from 'iconv-lite';
 
 export interface StockInfo {
@@ -28,6 +29,11 @@ export interface KlineData {
   low: number;
   close: number;
   volume: number;
+}
+
+export interface KlineWithIndicators {
+  klines: KlineData[];
+  indicators: IndicatorBundle | null;
 }
 
 // Stock metadata (industry, market cap, etc.)
@@ -61,7 +67,10 @@ export const STOCK_NAMES: Record<string, string> = {
 
 @Injectable()
 export class StockService implements OnApplicationBootstrap {
-  constructor(private readonly persistence: PersistenceService) {}
+  constructor(
+    private readonly persistence: PersistenceService,
+    private readonly indicatorCalc: IndicatorCalcService,
+  ) {}
   private readonly logger = new Logger(StockService.name);
   private realtimeCache: Map<string, StockInfo> = new Map();
   private lastFetchTime = 0;
@@ -504,6 +513,19 @@ export class StockService implements OnApplicationBootstrap {
    * 失败时返回空数组（不回退模拟数据，保证数据诚实性）
    */
   async getKlineData(symbol: string, period: string = 'daily', limit: number = 60): Promise<KlineData[]> {
+    const bundle = await this.getKlineBundle(symbol, period, limit);
+    return bundle.klines;
+  }
+
+  /**
+   * Get K-line + 技术指标（含 MA/MACD/BOLL/KDJ）
+   * 与 getKlineData 行为一致，外加 indicators 字段
+   */
+  async getKlineBundle(
+    symbol: string,
+    period: string = 'daily',
+    limit: number = 60,
+  ): Promise<KlineWithIndicators> {
     const code = this.getStockCode(symbol);
     const scale = period === 'weekly' ? 1680 : period === 'monthly' ? 7200 : 240;
     const datalen = Math.max(5, Math.min(limit, 250));
@@ -516,14 +538,14 @@ export class StockService implements OnApplicationBootstrap {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       });
-      if (!response.ok) return [];
+      if (!response.ok) return { klines: [], indicators: null };
       const text = await response.text();
       const match = text.match(/\((\[[\s\S]*\])\)/);
-      if (!match) return [];
+      if (!match) return { klines: [], indicators: null };
       const arr = JSON.parse(match[1]) as Array<{
         day: string; open: string; high: string; low: string; close: string; volume: string;
       }>;
-      return arr.slice(-datalen).map(k => ({
+      const klines: KlineData[] = arr.slice(-datalen).map(k => ({
         date: k.day,
         open: Number(k.open),
         high: Number(k.high),
@@ -531,9 +553,11 @@ export class StockService implements OnApplicationBootstrap {
         close: Number(k.close),
         volume: Number(k.volume) || 0,
       }));
+      const indicators = klines.length > 0 ? this.indicatorCalc.computeAll(klines) : null;
+      return { klines, indicators };
     } catch (error) {
       this.logger.error(`Failed to fetch kline for ${symbol}: ${error.message}`);
-      return [];
+      return { klines: [], indicators: null };
     }
   }
 

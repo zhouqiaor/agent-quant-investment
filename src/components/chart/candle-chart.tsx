@@ -1,5 +1,9 @@
 import { View, Text, Image } from '@tarojs/components'
 import { useMemo } from 'react'
+import type { IndicatorBundle } from '@/lib/indicators/types'
+import { MA_COLORS } from '@/lib/indicators/types'
+import { MacdChart } from './macd-chart'
+import { KdjChart } from './kdj-chart'
 
 export interface Candle {
   date: string
@@ -28,11 +32,29 @@ interface CandleChartProps {
   period?: string
   /** 周期切换回调 */
   onPeriodChange?: (p: string) => void
+  /** 技术指标（可选，含 MA/MACD/BOLL/KDJ） */
+  indicators?: IndicatorBundle
+  /** 是否显示 MA 叠加（默认 true） */
+  showMa?: boolean
+  /** 是否显示 BOLL 叠加（默认 true） */
+  showBoll?: boolean
+  /** 是否显示 MACD 副图（默认 true） */
+  showMacd?: boolean
+  /** 是否显示 KDJ 副图（默认 true） */
+  showKdj?: boolean
+  /** 是否显示信号标记（默认 true） */
+  showSignals?: boolean
+  /** MACD 副图高度 */
+  macdHeight?: number
+  /** KDJ 副图高度 */
+  kdjHeight?: number
 }
 
 /**
  * 轻量 K 线图（SVG，零依赖）
  * 特性：蜡烛实体 + 影线 + 成本参考线 + 当前价标注 + 周期切换
+ * 叠加：MA5/10/20/60 + BOLL 上下轨 + 信号三角标记
+ * 副图：MACD + KDJ
  */
 export function CandleChart({
   data,
@@ -44,6 +66,14 @@ export function CandleChart({
   periods,
   period,
   onPeriodChange,
+  indicators,
+  showMa = true,
+  showBoll = true,
+  showMacd = true,
+  showKdj = true,
+  showSignals = true,
+  macdHeight = 80,
+  kdjHeight = 60,
 }: CandleChartProps) {
   const valid = data && data.length >= 2
 
@@ -65,7 +95,7 @@ export function CandleChart({
     const candleW = (chartW / n) * 0.65
     const step = chartW / n
 
-    // 价格范围，含成本价
+    // 价格范围：含 candles / costPrice / currentPrice / BOLL / MA
     const highs = data.map(d => d.high)
     const lows = data.map(d => d.low)
     let maxV = Math.max(...highs)
@@ -78,15 +108,36 @@ export function CandleChart({
       maxV = Math.max(maxV, currentPrice)
       minV = Math.min(minV, currentPrice)
     }
+    // BOLL 上下轨也纳入范围
+    if (showBoll && indicators) {
+      for (const arr of [indicators.boll.upper, indicators.boll.lower, indicators.boll.mid]) {
+        for (const v of arr) {
+          if (v === null) continue
+          if (v > maxV) maxV = v
+          if (v < minV) minV = v
+        }
+      }
+    }
+    // MA 线纳入范围
+    if (showMa && indicators) {
+      for (const maKey of Object.keys(indicators.ma)) {
+        for (const v of indicators.ma[maKey]) {
+          if (v === null) continue
+          if (v > maxV) maxV = v
+          if (v < minV) minV = v
+        }
+      }
+    }
     const pad = (maxV - minV) * 0.08
     maxV += pad
     minV -= pad
     const range = maxV - minV || 1
 
     const yOf = (v: number) => padT + chartH - ((v - minV) / range) * chartH
+    const xOf = (i: number) => padL + i * step + step / 2
 
     const candles = data.map((d, i) => {
-      const x = padL + i * step + step / 2
+      const x = xOf(i)
       const isUp = d.close >= d.open
       const color = isUp ? up : down
       const topY = yOf(Math.max(d.open, d.close))
@@ -104,6 +155,49 @@ export function CandleChart({
     for (let i = 1; i <= 2; i++) {
       const y = padT + (chartH / 3) * i
       shapes.push(`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#1e293b" stroke-width="1"/>`)
+    }
+
+    // MA 叠加（在 K 线之前绘制，避免覆盖蜡烛）
+    if (showMa && indicators) {
+      for (const maPeriod of Object.keys(indicators.ma).sort((a, b) => Number(a) - Number(b))) {
+        const series = indicators.ma[maPeriod]
+        const color = MA_COLORS[maPeriod] ?? '#94a3b8'
+        let path = ''
+        let started = false
+        for (let i = 0; i < n; i++) {
+          const v = series[i]
+          if (v === null) continue
+          const x = xOf(i).toFixed(1)
+          const y = yOf(v).toFixed(1)
+          path += started ? ` L ${x} ${y}` : `M ${x} ${y}`
+          started = true
+        }
+        if (path) {
+          shapes.push(`<path d="${path}" stroke="${color}" stroke-width="1" fill="none" opacity="0.85"/>`)
+        }
+      }
+    }
+
+    // BOLL 叠加
+    if (showBoll && indicators) {
+      const drawBoll = (arr: (number | null)[], color: string, dash: string) => {
+        let path = ''
+        let started = false
+        for (let i = 0; i < n; i++) {
+          const v = arr[i]
+          if (v === null) continue
+          const x = xOf(i).toFixed(1)
+          const y = yOf(v).toFixed(1)
+          path += started ? ` L ${x} ${y}` : `M ${x} ${y}`
+          started = true
+        }
+        if (path) {
+          shapes.push(`<path d="${path}" stroke="${color}" stroke-width="1" fill="none" stroke-dasharray="${dash}" opacity="0.6"/>`)
+        }
+      }
+      drawBoll(indicators.boll.upper, '#a78bfa', '4,2')   // 紫 上轨
+      drawBoll(indicators.boll.mid, '#94a3b8', '2,2')     // 灰 中轨
+      drawBoll(indicators.boll.lower, '#a78bfa', '4,2')   // 紫 下轨
     }
 
     // 影线
@@ -132,7 +226,36 @@ export function CandleChart({
       shapes.push(`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="${c}" stroke-width="1" stroke-dasharray="3,3"/>`)
     }
 
-    // 十字光标（hover）：暂未开放交互
+    // 信号三角标记（最新一日的显著信号）
+    if (showSignals && indicators?.signals?.length) {
+      const last = n - 1
+      const recent = indicators.signals.filter((s) => s.index === last)
+      for (const s of recent) {
+        const x = xOf(last)
+        // 三角位置：底部上方 4px；颜色按信号类型
+        let color = '#fbbf24'
+        let label = ''
+        switch (s.type) {
+          case 'macd_golden':
+            color = '#22c55e'; label = 'MACD金叉'; break
+          case 'macd_death':
+            color = '#ef4444'; label = 'MACD死叉'; break
+          case 'boll_upper_break':
+            color = '#a855f7'; label = 'BOLL突破'; break
+          case 'boll_lower_break':
+            color = '#a855f7'; label = 'BOLL跌破'; break
+          case 'kdj_overbought':
+            color = '#f97316'; label = 'KDJ超买'; break
+          case 'kdj_oversold':
+            color = '#3b82f6'; label = 'KDJ超卖'; break
+        }
+        const ty = padT + 4
+        shapes.push(`<polygon points="${x.toFixed(1)},${ty} ${(x - 4).toFixed(1)},${(ty + 8).toFixed(1)} ${(x + 4).toFixed(1)},${(ty + 8).toFixed(1)}" fill="${color}"/>`)
+        if (label) {
+          shapes.push(`<text x="${x.toFixed(1)}" y="${(ty + 22).toFixed(1)}" font-size="9" fill="${color}" text-anchor="middle" font-family="sans-serif">${label}</text>`)
+        }
+      }
+    }
 
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${height}" width="${W}" height="${height}">
@@ -143,7 +266,7 @@ export function CandleChart({
 </svg>`
 
     return { svgContent: svg, displayIdx: idx }
-  }, [data, valid, height, redUp, costPrice, currentPrice])
+  }, [data, valid, height, redUp, costPrice, currentPrice, indicators, showMa, showBoll, showSignals])
 
   if (!valid) {
     return (
@@ -208,6 +331,16 @@ export function CandleChart({
           mode="widthFix"
         />
       </View>
+
+      {/* MACD 副图 */}
+      {showMacd && indicators?.macd && (
+        <MacdChart data={indicators.macd} height={macdHeight} redUp={redUp} />
+      )}
+
+      {/* KDJ 副图 */}
+      {showKdj && indicators?.kdj && (
+        <KdjChart data={indicators.kdj} height={kdjHeight} />
+      )}
     </View>
   )
 }

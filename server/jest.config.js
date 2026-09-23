@@ -2,6 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   roots: ['<rootDir>/src'],
   testRegex: '.*\\.(spec|e2e-spec)\\.ts$',
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },

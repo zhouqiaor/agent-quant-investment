@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { PersistenceService } from '@/persistence/persistence.service';
 import {
   DEFAULT_INDICATOR_CONFIG,
@@ -71,7 +77,9 @@ export const STOCK_NAMES: Record<string, string> = {
 };
 
 @Injectable()
-export class StockService implements OnApplicationBootstrap {
+export class StockService implements OnApplicationBootstrap, OnModuleDestroy {
+  /** 模块销毁时 abort 所有进行中的 fetch，避免 undici socket/timer 跨关闭边界泄漏 */
+  private abortController = new AbortController();
   constructor(
     private readonly persistence: PersistenceService,
     private readonly indicatorCalc: IndicatorCalcService,
@@ -93,6 +101,11 @@ export class StockService implements OnApplicationBootstrap {
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test') return;
     this.syncAllStocks().catch((e) => this.logger.warn(`目录预热失败: ${e.message}`));
+  }
+
+  onModuleDestroy(): void {
+    // 中断后台目录同步 / 实时行情 / K 线等一切挂起请求，释放 socket 与内部 timer
+    this.abortController.abort();
   }
 
   /**
@@ -130,9 +143,11 @@ export class StockService implements OnApplicationBootstrap {
       try {
         const response = await fetch(url, {
           headers: {
+            'Connection': 'close',
             Referer: 'https://finance.sina.com.cn',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           },
+          signal: this.abortController.signal,
         });
         if (!response.ok) break;
         rows = (await response.json()) as any[];
@@ -168,7 +183,11 @@ export class StockService implements OnApplicationBootstrap {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
+    return new Promise((r) => {
+      const t = setTimeout(r, ms);
+      // 限速/超时等待不应阻止进程（或测试 worker）退出
+      if (typeof t.unref === 'function') t.unref();
+    });
   }
 
   /** 搜索前确保目录可用（为空或过期时同步；2.5s 超时保护，超时后后台继续、本次走静态兜底） */
@@ -193,9 +212,11 @@ export class StockService implements OnApplicationBootstrap {
       
       const response = await fetch(url, {
         headers: {
+          'Connection': 'close',
           'Referer': 'https://finance.sina.com.cn',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        signal: this.abortController.signal,
       });
 
       if (!response.ok) return null;
@@ -266,9 +287,11 @@ export class StockService implements OnApplicationBootstrap {
       
       const response = await fetch(url, {
         headers: {
+          'Connection': 'close',
           'Referer': 'https://finance.sina.com.cn',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        signal: this.abortController.signal,
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -606,9 +629,11 @@ export class StockService implements OnApplicationBootstrap {
     try {
       const response = await fetch(url, {
         headers: {
+          'Connection': 'close',
           Referer: 'https://finance.sina.com.cn',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        signal: this.abortController.signal,
       });
       if (!response.ok) return { klines: [], indicators: null };
       const text = await response.text();

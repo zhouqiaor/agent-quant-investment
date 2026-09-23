@@ -14,14 +14,25 @@ import '@testing-library/jest-dom'
 // requestAnimationFrame / cancelAnimationFrame（jsdom 默认不提供）
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   let rafId = 0
+  // 记录 rAF id → 真实 timer 句柄，cancel 时才能正确清理，避免 pending 回调泄漏
+  const rafTimers = new Map<number, ReturnType<typeof setTimeout>>()
   globalThis.requestAnimationFrame = (cb: FrameRequestCallback): number => {
     rafId += 1
+    const id = rafId
     // 异步派发，更贴近真实行为
-    setTimeout(() => cb(Date.now()), 0)
-    return rafId
+    const timer = setTimeout(() => {
+      rafTimers.delete(id)
+      cb(Date.now())
+    }, 0)
+    rafTimers.set(id, timer)
+    return id
   }
   globalThis.cancelAnimationFrame = (id: number): void => {
-    clearTimeout(id)
+    const timer = rafTimers.get(id)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      rafTimers.delete(id)
+    }
   }
 }
 

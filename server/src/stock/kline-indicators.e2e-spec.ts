@@ -13,8 +13,17 @@ process.env.NODE_ENV = 'test';
 
 describe('K线 + 技术指标 E2E (TDD)', () => {
   let app: INestApplication;
+  const originalFetch = globalThis.fetch;
 
   beforeAll(async () => {
+    // 测试环境跳过外部 fetch：真实 Sina 请求会让 undici socket/timer 越过 worker 关闭边界
+    (globalThis as { fetch: unknown }).fetch = (async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '()',
+      json: async () => [],
+      arrayBuffer: async () => new ArrayBuffer(0),
+    }) as unknown) as typeof fetch;
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [PersistenceModule, StockModule],
     }).compile();
@@ -24,6 +33,7 @@ describe('K线 + 技术指标 E2E (TDD)', () => {
   });
 
   afterAll(async () => {
+    (globalThis as { fetch: unknown }).fetch = originalFetch;
     await app.close();
     try {
       require('fs').unlinkSync(TEST_DB);

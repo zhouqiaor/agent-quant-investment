@@ -19,6 +19,7 @@
  * useAnimatedNumber 的契约注释，便于后续补充。
  */
 
+import { renderHook, act } from '@testing-library/react'
 import { easeOutCubic, computeTweenValue, useAnimatedNumber } from './use-animated-number'
 
 describe('easeOutCubic', () => {
@@ -113,32 +114,124 @@ describe('computeTweenValue (纯函数，覆盖 hook 核心数学)', () => {
   })
 })
 
-describe('useAnimatedNumber 契约（注释式验证）', () => {
-  it('hook 已导出，可被调用', () => {
-    // 静态契约：仅验证可导入与函数类型。
-    // 运行时验证（初始值、target 变化、卸载清理）需 renderer，
-    // 待接入 RTL 时补充 renderHook(<useAnimatedNumber target={0} />)。
-    expect(typeof useAnimatedNumber).toBe('function')
+describe('useAnimatedNumber (renderHook 运行时)', () => {
+  let rafId = 0
+  let queued = new Map<number, FrameRequestCallback>()
+  let cancelSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    rafId = 0
+    queued = new Map<number, FrameRequestCallback>()
+    // 手动帧队列：runFrames(now) 用指定时间戳触发当前排队的所有帧
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (cb: FrameRequestCallback): number => {
+        rafId += 1
+        queued.set(rafId, cb)
+        return rafId
+      },
+    })
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (id: number): void => {
+        queued.delete(id)
+      },
+    })
+    cancelSpy = jest.spyOn(globalThis, 'cancelAnimationFrame')
   })
 
-  it('默认配置下，初始 display 等于 target（无需动画）', () => {
-    // useState 初始值由 useAnimatedNumber 内部设为 Number(target.toFixed(2))
-    // 这里仅做契约级断言：导出 hook 接受 target，未传入 options 时不抛错。
-    // 完整验证需 RTL 的 renderHook：
-    //   const { result } = renderHook(({ t }) => useAnimatedNumber(t), { initialProps: { t: 100 } })
-    //   expect(result.current).toBe(100)
-    expect(useAnimatedNumber.length).toBe(2)
+  afterEach(() => {
+    cancelSpy.mockRestore()
   })
 
-  it('rAF 生命周期：组件卸载时应 cancelAnimationFrame', () => {
-    // 契约：hook 的 useEffect cleanup 中调用 cancelAnimationFrame。
-    // 完整验证需 RTL：
-    //   const cancelSpy = jest.spyOn(global, 'cancelAnimationFrame')
-    //   const { unmount } = renderHook(() => useAnimatedNumber(100, { duration: 1000 }))
-    //   unmount()
-    //   expect(cancelSpy).toHaveBeenCalled()
-    //
-    // 当前仅做契约级断言，避免新增 jest 依赖。
-    expect(typeof useAnimatedNumber).toBe('function')
+  function runFrames(now: number): void {
+    const cbs = Array.from(queued.values())
+    queued.clear()
+    cbs.forEach((cb) => cb(now))
+  }
+
+  it('初始 display === target，无需动画', () => {
+    const { result } = renderHook(({ t }) => useAnimatedNumber(t), {
+      initialProps: { t: 100 },
+    })
+    expect(result.current).toBe(100)
+  })
+
+  it('target 变化后动画推进：首帧保持起点，中间帧过渡，duration 处到达终值并停止', () => {
+    const { rerender, result } = renderHook(
+      ({ t, duration }) => useAnimatedNumber(t, { duration }),
+      { initialProps: { t: 0, duration: 600 } },
+    )
+
+    rerender({ t: 100, duration: 600 })
+
+    act(() => runFrames(1000)) // startTime=1000, elapsed=0
+    expect(result.current).toBe(0)
+
+    act(() => runFrames(1300)) // elapsed=300 → 87.5
+    expect(result.current).toBeCloseTo(87.5, 1)
+
+    act(() => runFrames(1600)) // elapsed=600 → 100
+    expect(result.current).toBe(100)
+
+    // 动画结束后不再排队帧
+    expect(queued.size).toBe(0)
+  })
+
+  it('终值按 precision 截断（precision=0 → 整数终值）', () => {
+    const { rerender, result } = renderHook(
+      ({ t }) => useAnimatedNumber(t, { duration: 600, precision: 0 }),
+      { initialProps: { t: 0 } },
+    )
+    rerender({ t: 100 })
+
+    act(() => runFrames(2000))
+    act(() => runFrames(2600))
+    expect(result.current).toBe(100)
+  })
+
+  it('target 变化打断旧动画：旧帧被 cancel，从当前 display 重新出发', () => {
+    const { rerender, result } = renderHook(
+      ({ t }) => useAnimatedNumber(t, { duration: 600 }),
+      { initialProps: { t: 0 } },
+    )
+
+    // 挂载时排了一帧；重设 target 时应取消
+    rerender({ t: 100 })
+    expect(cancelSpy).toHaveBeenCalled()
+
+    act(() => runFrames(3000)) // elapsed=0 → 起点
+    expect(result.current).toBe(0)
+
+    // 动画到一半 target 改到 200
+    act(() => runFrames(3300)) // elapsed=300 → 87.5
+    expect(result.current).toBeCloseTo(87.5, 1)
+
+    rerender({ t: 200 })
+    act(() => runFrames(4000)) // 新动画首帧 → 从 87.5 出发
+    expect(result.current).toBeCloseTo(87.5, 1)
+  })
+
+  it('卸载时 cancelAnimationFrame 被调用', () => {
+    const { unmount } = renderHook(() => useAnimatedNumber(100, { duration: 1000 }))
+    unmount()
+    expect(cancelSpy).toHaveBeenCalled()
+  })
+
+  it('支持负数 target 的动画', () => {
+    const { rerender, result } = renderHook(
+      ({ t }) => useAnimatedNumber(t, { duration: 600 }),
+      { initialProps: { t: 0 } },
+    )
+    rerender({ t: -100 })
+
+    act(() => runFrames(5000))
+    act(() => runFrames(5300))
+    expect(result.current).toBeCloseTo(-87.5, 1)
+
+    act(() => runFrames(5600))
+    expect(result.current).toBe(-100)
   })
 })

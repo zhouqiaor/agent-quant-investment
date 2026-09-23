@@ -192,4 +192,29 @@ describe('useColorScheme', () => {
     expect(result.current.scheme).toBe('dark')
     expect(result.current.preference).toBe('auto')
   })
+
+  it('scheme 变化时同步到 <html> class 与 data-theme 属性', () => {
+    setupMatchMedia(false)
+    setupLocalStorage()
+    const { result } = renderHook(() => useColorScheme())
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+
+    act(() => {
+      result.current.setScheme('dark')
+    })
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.classList.contains('light')).toBe(false)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
+
+  it('卸载时移除 matchMedia change 监听', () => {
+    setupMatchMedia(true)
+    setupLocalStorage()
+    const { unmount } = renderHook(() => useColorScheme())
+    expect(listeners.length).toBeGreaterThanOrEqual(1)
+    const countBefore = listeners.length
+    unmount()
+    expect(listeners.length).toBe(countBefore - 1)
+  })
 })

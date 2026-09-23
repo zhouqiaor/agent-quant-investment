@@ -61,6 +61,29 @@ export function calcConsecutiveLimitUp(
 }
 
 /**
+ * 量比（EOD 日频近似）：最新一日成交量 / 前 lookback 日平均成交量。
+ *
+ * 盘中口径本为"当前累计每分钟均量 / 过去 5 日每分钟均量"，本项目仅有日 K，
+ * 故采用盘后标准简化：最新日总量 / 过去 lookback 日日均量。停牌日 volume=0
+ * 计入均值。数据不足 lookback+1 根、或前 lookback 日均量为 0（含最新量也为 0
+ * 及由零放量两种情形）时无法有意义计算，返回 undefined。
+ */
+export function calcVolumeRatio(
+  volumes: readonly number[],
+  lookback = 5,
+): number | undefined {
+  if (!Array.isArray(volumes) || volumes.length < lookback + 1) return undefined;
+  const latest = volumes[volumes.length - 1]!;
+  let sum = 0;
+  for (let i = volumes.length - 1 - lookback; i < volumes.length - 1; i++) {
+    sum += volumes[i]!;
+  }
+  const avg = sum / lookback;
+  if (!(avg > 0)) return undefined;
+  return latest / avg;
+}
+
+/**
  * 条件选股器执行服务
  *
  * 流程：
@@ -136,7 +159,7 @@ export class ScreenerService {
     if (directory.length === 0) return [];
 
     // 提前判断"哪些字段需要 K 线"：technical/pattern 类 + resonance 聚合
-    const needsKline = this.requiresKline(req.groups);
+    const needsKline = this.requiresKline(req);
 
     // 阶段 1：并发拉行情（max 8）
     const quotes: Array<StockInfo | null> = await this.mapWithLimit(
@@ -249,6 +272,8 @@ export class ScreenerService {
 
     // technical / pattern：基于 indicators
     if (bundle && bundle.klines.length > 0) {
+      // 量比：基于日 K volume 序列（最新日 / 前 5 日均量）
+      item.volumeRatio = calcVolumeRatio(bundle.klines.map((k) => k.volume));
       // 连续涨停：基于日 K 收盘序列（纯函数，不依赖指标）
       item.consecutiveLimitUp = calcConsecutiveLimitUp(
         bundle.klines,
@@ -419,11 +444,18 @@ export class ScreenerService {
   // Helpers
   // -------------------------------------------------------------------------
 
-  private requiresKline(groups: ScreenerRequest['groups']): boolean {
-    if (groups.length === 0) return false;
-    return groups.some((g) => {
-      const def = FIELD_DEFINITIONS[g.field as ScreenerField];
+  private requiresKline(req: ScreenerRequest): boolean {
+    // 过滤条件字段 + 排序字段都可能需要 K 线（如空 groups 按 volumeRatio 排序）
+    const fields: Array<ScreenerField | undefined> = [
+      ...req.groups.map((g) => g.field as ScreenerField),
+      req.sort.field,
+    ];
+    return fields.some((field) => {
+      if (!field) return false;
+      const def = FIELD_DEFINITIONS[field];
       if (!def) return false;
+      // volumeRatio 虽属 daily_quote，但需要历史日 K volume 序列计算
+      if (field === 'volumeRatio') return true;
       return def.dataSource === 'indicator' || def.dataSource === 'pattern_engine';
     });
   }

@@ -16,6 +16,7 @@
 import { ScreenerService } from './screener.service';
 import {
   calcConsecutiveLimitUp,
+  calcVolumeRatio,
   limitUpThreshold,
 } from './screener.service';
 import type { ScreenerRequest } from './schema';
@@ -62,6 +63,22 @@ function makeKlines(prices: number[]): KlineData[] {
 
 function makeKlineBundle(prices: number[]): KlineWithIndicators {
   return { klines: makeKlines(prices), indicators: null };
+}
+
+// 按指定 volume 序列构造平盘 K 线（close 不变 → 不触发涨停，专测量比）
+function makeKlinesWithVolumes(volumes: number[]): KlineData[] {
+  return volumes.map((v, i) => ({
+    date: `2024-06-${(i + 1).toString().padStart(2, '0')}`,
+    open: 10,
+    high: 10.5,
+    low: 9.5,
+    close: 10,
+    volume: v,
+  }));
+}
+
+function makeVolumeBundle(volumes: number[]): KlineWithIndicators {
+  return { klines: makeKlinesWithVolumes(volumes), indicators: null };
 }
 
 // 构造递增 K 线：deterministic 方便断言 MACD/BOLL/KDJ 输出
@@ -653,5 +670,111 @@ describe('ScreenerService - turnoverRate / consecutiveLimitUp', () => {
     });
     const res = await svc.evaluate(buildReq(limitFilter()));
     expect(res.items[0]!.consecutiveLimitUp).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// volumeRatio（量比）纯函数 + 过滤 + 排序
+// ---------------------------------------------------------------------------
+
+describe('ScreenerService - volumeRatio（量比）', () => {
+  const makeSvc = (opts: Parameters<typeof createMocks>[0]) => {
+    const mocks = createMocks(opts);
+    const svc = new ScreenerService(
+      mocks.persistence,
+      mocks.stockService,
+      mocks.indicatorCalc,
+    );
+    return { svc, mocks };
+  };
+
+  // --- 纯函数 -------------------------------------------------------------
+
+  it('标准：最新量 150 / 前5日均量 100 → 1.5', () => {
+    expect(calcVolumeRatio([100, 100, 100, 100, 100, 150])).toBeCloseTo(1.5);
+  });
+
+  it('数据不足（仅 4 根，需 lookback+1=6 根）→ undefined', () => {
+    expect(calcVolumeRatio([100, 100, 100, 150])).toBeUndefined();
+  });
+
+  it('前5日均量为 0、最新量 > 0（由零放量）→ undefined', () => {
+    expect(calcVolumeRatio([0, 0, 0, 0, 0, 150])).toBeUndefined();
+  });
+
+  it('全部为 0 → undefined', () => {
+    expect(calcVolumeRatio([0, 0, 0, 0, 0, 0])).toBeUndefined();
+  });
+
+  it('含停牌 0 的均值正确：(100+0+100+100+200)/5=100，150/100=1.5', () => {
+    expect(calcVolumeRatio([100, 0, 100, 100, 200, 150])).toBeCloseTo(1.5);
+  });
+
+  it('自定义 lookback=3：最新 200 / 前3日均量 100 → 2', () => {
+    expect(calcVolumeRatio([100, 100, 100, 200], 3)).toBeCloseTo(2);
+  });
+
+  // --- 过滤（端到端） -----------------------------------------------------
+
+  it('过滤 volumeRatio > 2：放量命中、缩量不命中', async () => {
+    const { svc } = makeSvc({
+      directory: [
+        { symbol: '600001', name: '放量' },
+        { symbol: '600002', name: '缩量' },
+      ],
+      quoteMap: {
+        '600001': makeQuote('600001', '放量'),
+        '600002': makeQuote('600002', '缩量'),
+      },
+      klineMap: {
+        // 前5日均 100，最新 300 → 3
+        '600001': makeVolumeBundle([100, 100, 100, 100, 100, 300]),
+        // 前5日均 100，最新 150 → 1.5
+        '600002': makeVolumeBundle([100, 100, 100, 100, 100, 150]),
+      },
+    });
+    const res = await svc.evaluate(
+      buildReq({ groups: [{ field: 'volumeRatio', op: '>', value: 2 }] }),
+    );
+    expect(res.items.map((i) => i.symbol)).toEqual(['600001']);
+  });
+
+  it('K 线不足时 volumeRatio 缺失，被 > 过滤排除', async () => {
+    const { svc } = makeSvc({
+      directory: [{ symbol: '600001', name: '新股' }],
+      quoteMap: { '600001': makeQuote('600001', '新股') },
+      klineMap: { '600001': makeVolumeBundle([100, 150]) },
+    });
+    const res = await svc.evaluate(
+      buildReq({ groups: [{ field: 'volumeRatio', op: '>', value: 0 }] }),
+    );
+    expect(res.total).toBe(0);
+  });
+
+  // --- 排序（端到端） -----------------------------------------------------
+
+  it('按 volumeRatio:desc 排序，undefined 置末', async () => {
+    const { svc } = makeSvc({
+      directory: [
+        { symbol: 'S1', name: 'S1' },
+        { symbol: 'S2', name: 'S2' },
+        { symbol: 'S3', name: 'S3' },
+      ],
+      quoteMap: {
+        S1: makeQuote('S1', 'S1'),
+        S2: makeQuote('S2', 'S2'),
+        S3: makeQuote('S3', 'S3'),
+      },
+      klineMap: {
+        S1: makeVolumeBundle([100, 100, 100, 100, 100, 200]), // 2
+        S2: makeVolumeBundle([100, 100, 100, 100, 100, 300]), // 3
+        S3: makeVolumeBundle([500]), // 不足 → undefined
+      },
+    });
+    const res = await svc.evaluate(
+      buildReq({ sort: { field: 'volumeRatio', order: 'desc' } }),
+    );
+    expect(res.items.map((i) => i.symbol)).toEqual(['S2', 'S1', 'S3']);
+    expect(res.items[2]!.volumeRatio).toBeUndefined();
   });
 });

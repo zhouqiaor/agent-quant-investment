@@ -20,6 +20,7 @@ import {
   ArrowDownRight,
   Shield,
   Bell,
+  Briefcase,
   TriangleAlert,
   RotateCcw,
   Sun,
@@ -468,6 +469,31 @@ const ProfilePage = () => {
                       </View>
                       <Badge className="bg-amber-500 bg-opacity-20 text-amber-400 border-amber-500 border-opacity-30 tabular-nums">
                         {risk.dailyTradeLimit} 次
+                      </Badge>
+                    </View>
+                  </View>
+                </CardContent>
+              </Card>
+
+              {/* 组合管理入口 */}
+              <Card
+                className="bg-slate-800 border-slate-700"
+                onClick={() => Taro.navigateTo({ url: '/pages/portfolio/index' })}
+              >
+                <CardContent className="p-4">
+                  <View className="flex flex-row items-center justify-between">
+                    <View className="flex flex-row items-center gap-2">
+                      <Briefcase size={16} color="#38bdf8" />
+                      <View className="flex flex-col gap-1">
+                        <Text className="block text-sm text-slate-100">组合管理</Text>
+                        <Text className="block text-xs text-slate-500">
+                          总资产视图与多策略 PnL、运行开关
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="flex flex-row items-center gap-2">
+                      <Badge className="bg-sky-500 bg-opacity-20 text-sky-400">
+                        <Text className="block text-xs">→</Text>
                       </Badge>
                     </View>
                   </View>

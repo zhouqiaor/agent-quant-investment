@@ -89,7 +89,12 @@ function setupLocalStorage(initial: Record<string, string> = {}): LocalStorageMo
       Object.keys(store).forEach((k) => delete store[k])
     }),
   }
-  ;(window as unknown as { localStorage: LocalStorageMock }).localStorage = mock
+  // jsdom 的 localStorage 为原型只读访问器，直接赋值不会生效，需 defineProperty
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mock,
+    configurable: true,
+    writable: true,
+  })
   return mock
 }
 

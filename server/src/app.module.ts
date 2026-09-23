@@ -16,9 +16,10 @@ import { OptimizerModule } from '@/optimizer/optimizer.module';
 import { NotificationModule } from '@/notification/notification.module';
 import { BetaModule } from '@/beta/beta.module';
 import { ScreenerModule } from '@/screener/screener.module';
+import { PortfolioModule } from '@/portfolio/portfolio.module';
 
 @Module({
-  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, ScreenerModule],
+  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, ScreenerModule, PortfolioModule],
   controllers: [AppController],
   providers: [AppService],
 })

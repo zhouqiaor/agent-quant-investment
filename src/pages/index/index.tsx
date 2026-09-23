@@ -466,6 +466,13 @@ const IndexPage = () => {
           <Button
             variant="outline"
             className="flex-1 bg-slate-800 border-slate-600 text-slate-300 rounded-xl"
+            onClick={() => Taro.navigateTo({ url: '/pages/screener/index' })}
+          >
+            <Text className="block text-xs">条件选股</Text>
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 bg-slate-800 border-slate-600 text-slate-300 rounded-xl"
             onClick={() => Taro.navigateTo({ url: '/pages/paper-trading/index' })}
           >
             <Text className="block text-xs">交易明细</Text>

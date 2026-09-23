@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { VirtualList } from '@/components/ui/virtual-list'
-import { Search, TrendingUp, TrendingDown, Star, TriangleAlert } from 'lucide-react-taro'
+import { Search, TrendingUp, TrendingDown, Star, TriangleAlert, SlidersHorizontal } from 'lucide-react-taro'
 import { useStaleQuery } from '@/lib/use-stale-query'
 
 interface MarketItem {
@@ -184,17 +184,26 @@ const MarketPage = () => {
 
   return (
     <View className="flex flex-col h-full bg-slate-900">
-      {/* 搜索栏 */}
+      {/* 搜索栏 + 条件选股入口 */}
       <View className="px-4 pt-3 pb-2">
-        <View className="flex flex-row items-center gap-2 bg-slate-800 rounded-lg px-3 py-2">
-          <Search size={16} color="#64748b" />
-          <Input
-            className="flex-1 bg-transparent text-sm text-slate-100 border-none"
-            placeholder="搜索币种名称或代号..."
-            placeholderStyle="color: #64748b"
-            value={searchText}
-            onInput={(e) => setSearchText(e.detail.value)}
-          />
+        <View className="flex flex-row items-center gap-2">
+          <View className="flex flex-1 flex-row items-center gap-2 bg-slate-800 rounded-lg px-3 py-2">
+            <Search size={16} color="#64748b" />
+            <Input
+              className="flex-1 bg-transparent text-sm text-slate-100 border-none"
+              placeholder="搜索币种名称或代号..."
+              placeholderStyle="color: #64748b"
+              value={searchText}
+              onInput={(e) => setSearchText(e.detail.value)}
+            />
+          </View>
+          <View
+            className="flex flex-row items-center gap-1 bg-slate-800 rounded-lg px-3 py-2"
+            onClick={() => Taro.navigateTo({ url: '/pages/screener/index' })}
+          >
+            <SlidersHorizontal size={16} color="#34d399" />
+            <Text className="block text-xs text-emerald-400 whitespace-nowrap">条件选股</Text>
+          </View>
         </View>
       </View>
 

@@ -21,22 +21,6 @@
 
 import { easeOutCubic, computeTweenValue, useAnimatedNumber } from './use-animated-number'
 
-/* eslint-disable @typescript-eslint/no-namespace, no-var */
-declare global {
-  // 极简测试全局声明——避免引入 jest 类型依赖
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  type JestLikeGlobal = unknown
-}
-
-// 函数式 describe / it / expect：让 tsc 把它们当作 ambient 标识符
-declare const describe: (name: string, fn: () => void) => void
-declare const it: (name: string, fn: () => void) => void
-declare const expect: (val: unknown) => {
-  toBe: (expected: unknown) => void
-  toEqual: (expected: unknown) => void
-  toBeCloseTo: (expected: number, digits?: number) => void
-}
-
 describe('easeOutCubic', () => {
   it('at t=0 returns 0', () => {
     expect(easeOutCubic(0)).toBe(0)

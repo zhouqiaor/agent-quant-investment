@@ -18,28 +18,9 @@ import {
   useIndicatorSettingsStore,
 } from './indicator-settings'
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-declare const describe: (name: string, fn: () => void) => void
-declare const it: (name: string, fn: () => void) => void
-declare const expect: (val: unknown) => {
-  toBe: (expected: unknown) => void
-  toEqual: (expected: unknown) => void
-  toBeTruthy: () => void
-  toBeFalsy: () => void
-  toBeDefined: () => void
-  toContain: (expected: unknown) => void
-}
-declare const beforeEach: (fn: () => void) => void
-declare const afterEach: (fn: () => void) => void
-
-// 注入 localStorage shim（Node 环境无原生）
+// 注入 localStorage shim（jsdom 的 localStorage 为原型只读访问器，需 defineProperty）
 const _lsMap = new Map<string, string>()
-;(globalThis as unknown as { localStorage: Map<string, string> & {
-  getItem: (k: string) => string | null
-  setItem: (k: string, v: string) => void
-  removeItem: (k: string) => void
-  clear: () => void
-} }).localStorage = Object.assign(_lsMap, {
+const _lsShim = Object.assign(_lsMap, {
   getItem: (k: string) => (_lsMap.has(k) ? _lsMap.get(k)! : null),
   setItem: (k: string, v: string) => {
     _lsMap.set(k, v)
@@ -48,8 +29,13 @@ const _lsMap = new Map<string, string>()
     _lsMap.delete(k)
   },
   clear: () => {
-    _lsMap.clear()
+    Map.prototype.clear.call(_lsMap)
   },
+})
+Object.defineProperty(globalThis, 'localStorage', {
+  value: _lsShim,
+  configurable: true,
+  writable: true,
 })
 
 beforeEach(() => {

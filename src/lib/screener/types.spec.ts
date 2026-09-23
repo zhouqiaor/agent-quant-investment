@@ -25,18 +25,6 @@ import {
   getFieldsByCategory,
 } from './types'
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-declare const describe: (name: string, fn: () => void) => void
-declare const it: (name: string, fn: () => void) => void
-declare const expect: (val: unknown) => {
-  toBe: (expected: unknown) => void
-  toEqual: (expected: unknown) => void
-  toBeTruthy: () => void
-  toBeDefined: () => void
-  toBeUndefined: () => void
-  toContain: (expected: unknown) => void
-}
-
 describe('FIELD_DEFINITIONS 完整性', () => {
   it('恰好覆盖 12 个字段', () => {
     expect(SCREENER_FIELDS.length).toBe(12)

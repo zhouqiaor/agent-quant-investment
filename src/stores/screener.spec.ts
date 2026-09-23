@@ -17,33 +17,9 @@
 import { PRESETS_STORAGE_KEY } from '@/lib/screener/types'
 import { useScreenerStore } from './screener'
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-declare const describe: (name: string, fn: () => void) => void
-declare const it: (name: string, fn: () => void) => void
-declare const expect: (val: unknown) => {
-  toBe: (expected: unknown) => void
-  toEqual: (expected: unknown) => void
-  toBeTruthy: () => void
-  toBeFalsy: () => void
-  toBeDefined: () => void
-  toContain: (expected: unknown) => void
-}
-declare const beforeEach: (fn: () => void) => void
-declare const afterEach: (fn: () => void) => void
-declare const jest: {
-  fn: () => (...args: unknown[]) => unknown
-  mock: (moduleName: string, factory: () => unknown) => void
-  clearAllMocks: () => void
-}
-
-// 注入 localStorage shim（Node 环境无原生）
+// 注入 localStorage shim（jsdom 的 localStorage 为原型只读访问器，需 defineProperty）
 const _lsMap = new Map<string, string>()
-;(globalThis as unknown as { localStorage: Map<string, string> & {
-  getItem: (k: string) => string | null
-  setItem: (k: string, v: string) => void
-  removeItem: (k: string) => void
-  clear: () => void
-} }).localStorage = Object.assign(_lsMap, {
+const _lsShim = Object.assign(_lsMap, {
   getItem: (k: string) => (_lsMap.has(k) ? _lsMap.get(k)! : null),
   setItem: (k: string, v: string) => {
     _lsMap.set(k, v)
@@ -52,8 +28,13 @@ const _lsMap = new Map<string, string>()
     _lsMap.delete(k)
   },
   clear: () => {
-    _lsMap.clear()
+    Map.prototype.clear.call(_lsMap)
   },
+})
+Object.defineProperty(globalThis, 'localStorage', {
+  value: _lsShim,
+  configurable: true,
+  writable: true,
 })
 
 // mock 网络层
@@ -188,6 +169,12 @@ describe('useScreenerStore presets 持久化', () => {
   })
 
   it('loadPreset 命中时回填 conditions/combinator/sort', () => {
+    // 先预置一个带条件的状态再保存，preset 内才有 conditions 可回填
+    // （sort 用 store 初始默认值 changePct/desc）
+    useScreenerStore.setState({
+      conditions: [{ field: 'pe', op: '<', value: 10 }],
+      combinator: 'AND',
+    })
     useScreenerStore.getState().savePreset('A')
     const id = useScreenerStore.getState().presets[0].id
     // 修改 store 状态

@@ -7,9 +7,10 @@ import { StockModule } from '../stock/stock.module';
 import { BetaConfigService } from './beta-config.service';
 import { LivePnlService } from './live-pnl.service';
 import { BetaController } from './beta.controller';
+import { PortfolioModule } from '../portfolio/portfolio.module';
 
 @Module({
-  imports: [PersistenceModule, StrategyModule, PaperTradingModule, NotificationModule, StockModule],
+  imports: [PersistenceModule, StrategyModule, PaperTradingModule, NotificationModule, StockModule, PortfolioModule],
   controllers: [BetaController],
   providers: [BetaConfigService, LivePnlService],
   exports: [BetaConfigService, LivePnlService],

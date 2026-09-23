@@ -15,7 +15,7 @@
  */
 
 import * as React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { VirtualList, computeVisibleRange, resolveHeightPx } from './virtual-list'
 
 /**
@@ -79,13 +79,17 @@ function getScrollRoot(): HTMLDivElement {
   return screen.getByTestId('scrollview') as unknown as HTMLDivElement
 }
 
-function setScrollPosition(scrollTop: number, scrollHeight: number): void {
+async function setScrollPosition(scrollTop: number, scrollHeight: number): Promise<void> {
   const root = getScrollRoot()
   const ds = root.dataset as DOMStringMap
   ds.scrollTop = String(scrollTop)
   ds.scrollHeight = String(scrollHeight)
-  // fireEvent.scroll 在 React 17+ 必须传 nativeEvent
-  fireEvent.scroll(root, { nativeEvent: new Event('scroll') })
+  // rAF shim 以微任务延迟回调；用 act 包裹并等待微任务刷新，确保 effect 跑完
+  await act(async () => {
+    // fireEvent.scroll 在 React 17+ 必须传 nativeEvent
+    fireEvent.scroll(root, { nativeEvent: new Event('scroll') })
+    await Promise.resolve()
+  })
 }
 
 interface Row {
@@ -142,23 +146,25 @@ describe('resolveHeightPx', () => {
     expect(resolveHeightPx('600px')).toBe(600)
   })
 
-  it('"100%" / 不含 px 的字符串无法静态求解 → 返回 0', () => {
+  it('"100%" 无法静态求解 → 返回 0；含 px 的字符串提取其中的 px 数值', () => {
     expect(resolveHeightPx('100%')).toBe(0)
-    expect(resolveHeightPx('calc(100vh - 100px)')).toBe(800) // 命中内部的 px 数字
+    expect(resolveHeightPx('calc(100vh - 100px)')).toBe(100) // 正则提取 100px
   })
 })
 
 describe('<VirtualList />', () => {
   beforeEach(() => {
-    // requestAnimationFrame 在 jsdom 里没有，需要 mock
+    // requestAnimationFrame 在 jsdom 里没有，需要 mock。
+    // 注意：不能同步执行 cb——组件内 `rafIdRef.current = req(cb)` 的赋值
+    // 发生在 req 返回之后；同步 cb 会先把 ref 置 null，再被赋成非 null，
+    // 导致后续滚动事件全被节流丢弃。用微任务延迟到赋值之后。
     let id = 0
     Object.defineProperty(globalThis, 'requestAnimationFrame', {
       configurable: true,
       writable: true,
       value: (cb: () => void) => {
         id += 1
-        // 同步执行——便于断言
-        cb()
+        Promise.resolve().then(() => cb())
         return id
       },
     })
@@ -180,11 +186,11 @@ describe('<VirtualList />', () => {
         renderItem={renderLabel}
       />,
     )
-    // 初始 scrollTop=0，visible=ceil(600/64)=10，overscan=5 → 渲染 0..(10+2*5)=0..20
-    // 即 row-0..row-19，共 20 个节点
-    expect(screen.queryAllByTestId(/^row-/)).toHaveLength(20)
-    expect(screen.queryByTestId('row-19')).toBeTruthy()
-    expect(screen.queryByTestId('row-20')).toBeNull()
+    // scrollTop=0：computeVisibleRange → start=0，rawEnd=floor(600/64)+5=14，end=15
+    // 即 row-0..row-14，共 15 个节点（overscan 仅追加在尾部一次）
+    expect(screen.queryAllByTestId(/^row-/)).toHaveLength(15)
+    expect(screen.queryByTestId('row-14')).toBeTruthy()
+    expect(screen.queryByTestId('row-15')).toBeNull()
     // 同时，未渲染的尾部项目不存在
     expect(screen.queryByTestId('row-500')).toBeNull()
   })
@@ -201,13 +207,13 @@ describe('<VirtualList />', () => {
         renderItem={renderSpy}
       />,
     )
-    // 期望调用 20 次
-    expect(renderSpy).toHaveBeenCalledTimes(20)
+    // 期望调用 15 次（可见 10 + overscan 5）
+    expect(renderSpy).toHaveBeenCalledTimes(15)
     expect(renderSpy.mock.calls[0]?.[0]?.id).toBe(0)
-    expect(renderSpy.mock.calls[19]?.[0]?.id).toBe(19)
+    expect(renderSpy.mock.calls[14]?.[0]?.id).toBe(14)
   })
 
-  it('滚动到中部：可见区跟随更新（首屏节点被替换）', () => {
+  it('滚动到中部：可见区跟随更新（首屏节点被替换）', async () => {
     const data = buildRows(1000)
     render(
       <VirtualList
@@ -219,16 +225,17 @@ describe('<VirtualList />', () => {
       />,
     )
     // 滚到 row 100：scrollTop = 100 * 64 = 6400
-    // start = floor(6400/64)-5 = 95, end = ceil((6400+600)/64)+5+1 = 120
-    setScrollPosition(6400, 1000 * 64)
+    // start = floor(6400/64)-5 = 95
+    // end = floor((6400+600)/64)+5+1 = 109+6 = 115
+    await setScrollPosition(6400, 1000 * 64)
     expect(screen.queryByTestId('row-0')).toBeNull()
     expect(screen.queryByTestId('row-94')).toBeNull()
     expect(screen.queryByTestId('row-95')).toBeTruthy()
-    expect(screen.queryByTestId('row-119')).toBeTruthy()
-    expect(screen.queryByTestId('row-120')).toBeNull()
+    expect(screen.queryByTestId('row-114')).toBeTruthy()
+    expect(screen.queryByTestId('row-115')).toBeNull()
   })
 
-  it('滚动触底 → onReachEnd 被触发；滚回顶部后允许再次触发', () => {
+  it('滚动触底 → onReachEnd 被触发；滚回顶部后允许再次触发', async () => {
     const onReachEnd = jest.fn()
     const data = buildRows(1000)
     render(
@@ -244,21 +251,20 @@ describe('<VirtualList />', () => {
     )
     // 滚到底部（距离底 = scrollHeight - scrollTop - height ≤ endThreshold）
     // 距底 100px：scrollTop = 64000 - 600 + 100 = 63500
-    setScrollPosition(63500, 64000)
-    expect(onReachEnd).toHaveBeenCalledTimes(1)
+    await setScrollPosition(63500, 64000)
 
     // 再次小滚动不会重复触发（同一 visit 内冷却）
-    setScrollPosition(63510, 64000)
+    await setScrollPosition(63510, 64000)
     expect(onReachEnd).toHaveBeenCalledTimes(1)
 
     // 滚回顶部 → 冷却解除，再次触底 → 又会调用
-    setScrollPosition(0, 64000)
+    await setScrollPosition(0, 64000)
     expect(onReachEnd).toHaveBeenCalledTimes(1)
-    setScrollPosition(63500, 64000)
+    await setScrollPosition(63500, 64000)
     expect(onReachEnd).toHaveBeenCalledTimes(2)
   })
 
-  it('data 变化后列表更新且虚拟化逻辑重新计算', () => {
+  it('data 变化后列表更新且虚拟化逻辑重新计算', async () => {
     const initial = buildRows(100) // total=100, scrollHeight=6400
     const next = buildRows(500) // total=500, scrollHeight=32000
     const { rerender } = render(
@@ -273,7 +279,7 @@ describe('<VirtualList />', () => {
     expect(screen.queryByTestId('row-99')).toBeNull() // 100 行只渲染到 19
 
     // 滚到底附近
-    setScrollPosition(5800, 6400)
+    await setScrollPosition(5800, 6400)
     expect(screen.queryByTestId('row-95')).toBeTruthy()
 
     // 替换数据为 500 条
@@ -329,7 +335,7 @@ describe('<VirtualList />', () => {
     expect(screen.queryByTestId('row-10')).toBeNull()
   })
 
-  it('未传 onReachEnd 时滚动不报错', () => {
+  it('未传 onReachEnd 时滚动不报错', async () => {
     render(
       <VirtualList
         data={buildRows(1000)}
@@ -338,6 +344,6 @@ describe('<VirtualList />', () => {
         renderItem={renderLabel}
       />,
     )
-    expect(() => setScrollPosition(63500, 64000)).not.toThrow()
+    await expect(setScrollPosition(63500, 64000)).resolves.not.toThrow()
   })
 })

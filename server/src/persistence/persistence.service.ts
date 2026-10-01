@@ -382,6 +382,68 @@ export class PersistenceService implements OnModuleInit {
         equity REAL NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_ab_eq_exp_side_ts ON ab_equity_points(experiment_id, side, ts);
+
+      -- ========= 100 账户仿真 =========
+      CREATE TABLE IF NOT EXISTS simulation_runs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        account_count INTEGER NOT NULL,
+        industries TEXT,
+        strategies TEXT,
+        status TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        config TEXT,
+        aggregate_metrics TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_sim_runs_status ON simulation_runs(status);
+
+      CREATE TABLE IF NOT EXISTS sim_accounts (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        industry TEXT NOT NULL,
+        strategy TEXT NOT NULL,
+        initial_capital REAL NOT NULL,
+        cash REAL NOT NULL,
+        risk_preference TEXT NOT NULL,
+        trades_per_hour INTEGER NOT NULL,
+        param_overrides TEXT,
+        watchlist TEXT,
+        frozen INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sim_acc_run ON sim_accounts(run_id);
+
+      CREATE TABLE IF NOT EXISTS sim_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        cash REAL NOT NULL,
+        equity REAL NOT NULL,
+        position_value REAL NOT NULL,
+        total_pnl REAL NOT NULL,
+        total_pnl_rate REAL NOT NULL,
+        trade_count INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sim_snap_run_acc_ts ON sim_snapshots(run_id, account_id, ts);
+
+      CREATE TABLE IF NOT EXISTS sim_trades (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        side TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        price REAL NOT NULL,
+        amount REAL NOT NULL,
+        reason TEXT,
+        pnl REAL,
+        ts INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sim_trades_run_acc ON sim_trades(run_id, account_id, ts);
     `);
   }
 
@@ -677,6 +739,111 @@ export class PersistenceService implements OnModuleInit {
     if (!before) return false;
     tx(id);
     return true;
+  }
+
+  // ========== 100 账户仿真 ==========
+  saveSimulationRun(run: {
+    id: string; name: string; accountCount: number; industries: string[];
+    strategies: string[]; status: string; startedAt: number; config: any;
+  }): void {
+    this.db.prepare(`INSERT OR REPLACE INTO simulation_runs
+      (id, name, account_count, industries, strategies, status, started_at, config)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(run.id, run.name, run.accountCount,
+        JSON.stringify(run.industries), JSON.stringify(run.strategies),
+        run.status, run.startedAt, JSON.stringify(run.config))
+  }
+
+  updateSimulationRun(id: string, patch: Partial<{ status: string; finishedAt: number; aggregateMetrics: any }>): void {
+    const fields: string[] = []
+    const values: any[] = []
+    if (patch.status !== undefined) { fields.push('status = ?'); values.push(patch.status) }
+    if (patch.finishedAt !== undefined) { fields.push('finished_at = ?'); values.push(patch.finishedAt) }
+    if (patch.aggregateMetrics !== undefined) { fields.push('aggregate_metrics = ?'); values.push(JSON.stringify(patch.aggregateMetrics)) }
+    if (fields.length === 0) return
+    values.push(id)
+    this.db.prepare(`UPDATE simulation_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  }
+
+  getSimulationRun(id: string): any | null {
+    const row: any = this.db.prepare('SELECT * FROM simulation_runs WHERE id = ?').get(id)
+    if (!row) return null
+    return this.hydrateSimulationRun(row)
+  }
+
+  listSimulationRuns(limit = 20): any[] {
+    const rows: any[] = this.db.prepare('SELECT * FROM simulation_runs ORDER BY started_at DESC LIMIT ?').all(limit)
+    return rows.map(r => this.hydrateSimulationRun(r))
+  }
+
+  private hydrateSimulationRun(row: any): any {
+    try { row.industries = JSON.parse(row.industries || '[]') } catch { row.industries = [] }
+    try { row.strategies = JSON.parse(row.strategies || '[]') } catch { row.strategies = [] }
+    try { row.config = JSON.parse(row.config || '{}') } catch { row.config = {} }
+    try { row.aggregateMetrics = row.aggregate_metrics ? JSON.parse(row.aggregate_metrics) : null } catch { row.aggregateMetrics = null }
+    return row
+  }
+
+  saveSimAccount(acc: {
+    id: string; runId: string; seq: number; name: string; industry: string;
+    strategy: string; initialCapital: number; cash: number; riskPreference: string;
+    tradesPerHour: number; paramOverrides: any; watchlist: string[];
+  }): void {
+    this.db.prepare(`INSERT OR REPLACE INTO sim_accounts
+      (id, run_id, seq, name, industry, strategy, initial_capital, cash, risk_preference, trades_per_hour, param_overrides, watchlist, frozen, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+      .run(acc.id, acc.runId, acc.seq, acc.name, acc.industry, acc.strategy,
+        acc.initialCapital, acc.cash, acc.riskPreference, acc.tradesPerHour,
+        JSON.stringify(acc.paramOverrides), JSON.stringify(acc.watchlist), Date.now())
+  }
+
+  updateSimAccount(id: string, patch: Partial<{ cash: number; frozen: number }>): void {
+    const fields: string[] = []
+    const values: any[] = []
+    if (patch.cash !== undefined) { fields.push('cash = ?'); values.push(patch.cash) }
+    if (patch.frozen !== undefined) { fields.push('frozen = ?'); values.push(patch.frozen) }
+    if (fields.length === 0) return
+    values.push(id)
+    this.db.prepare(`UPDATE sim_accounts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  }
+
+  listSimAccounts(runId: string): any[] {
+    const rows: any[] = this.db.prepare('SELECT * FROM sim_accounts WHERE run_id = ? ORDER BY seq').all(runId)
+    return rows.map((r: any) => {
+      try { r.paramOverrides = JSON.parse(r.param_overrides || '{}') } catch { r.paramOverrides = {} }
+      try { r.watchlist = JSON.parse(r.watchlist || '[]') } catch { r.watchlist = [] }
+      return r
+    })
+  }
+
+  saveSimSnapshot(s: {
+    runId: string; accountId: string; ts: number; cash: number; equity: number;
+    positionValue: number; totalPnl: number; totalPnlRate: number; tradeCount: number;
+  }): void {
+    this.db.prepare(`INSERT INTO sim_snapshots
+      (run_id, account_id, ts, cash, equity, position_value, total_pnl, total_pnl_rate, trade_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(s.runId, s.accountId, s.ts, s.cash, s.equity, s.positionValue,
+        s.totalPnl, s.totalPnlRate, s.tradeCount)
+  }
+
+  saveSimTrade(t: {
+    id: string; runId: string; accountId: string; symbol: string; side: 'BUY' | 'SELL';
+    quantity: number; price: number; amount: number; reason: string; pnl: number | null; ts: number;
+  }): void {
+    this.db.prepare(`INSERT INTO sim_trades
+      (id, run_id, account_id, symbol, side, quantity, price, amount, reason, pnl, ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(t.id, t.runId, t.accountId, t.symbol, t.side, t.quantity,
+        t.price, t.amount, t.reason, t.pnl, t.ts)
+  }
+
+  listSimTrades(runId: string, accountId?: string): any[] {
+    const sql = accountId
+      ? 'SELECT * FROM sim_trades WHERE run_id = ? AND account_id = ? ORDER BY ts DESC LIMIT 200'
+      : 'SELECT * FROM sim_trades WHERE run_id = ? ORDER BY ts DESC LIMIT 200'
+    const rows: any[] = this.db.prepare(sql).all(...(accountId ? [runId, accountId] : [runId]))
+    return rows
   }
 
   saveAbEquityPoints(points: Array<{ experimentId: string; side: 'v1' | 'v2'; ts: number; equity: number }>): number {

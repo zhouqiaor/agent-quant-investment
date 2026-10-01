@@ -812,6 +812,11 @@ export class PersistenceService implements OnModuleInit {
     return rows.map((r: any) => {
       try { r.paramOverrides = JSON.parse(r.param_overrides || '{}') } catch { r.paramOverrides = {} }
       try { r.watchlist = JSON.parse(r.watchlist || '[]') } catch { r.watchlist = [] }
+      // 关键：snake_case → camelCase 映射，让上层代码能直接用 runId / initialCapital / riskPreference
+      r.runId = r.run_id
+      r.initialCapital = r.initial_capital
+      r.riskPreference = r.risk_preference
+      r.tradesPerHour = r.trades_per_hour
       return r
     })
   }
@@ -1081,6 +1086,23 @@ export class PersistenceService implements OnModuleInit {
       .prepare('SELECT date FROM history_kline WHERE symbol = ? AND date >= ? AND date <= ?')
       .all(symbol, start, end) as Array<{ date: string }>;
     return new Set(rows.map((r) => r.date));
+  }
+
+  /**
+   * 获取某月所有已落库的交易日（YYYY-MM-DD 字符串数组，去重排序）。
+   * 用于仿真回放模式 — 按月推进虚拟日期。
+   */
+  getTradingDaysForMonth(month: string): string[] {
+    const start = `${month}-01`
+    const end = `${month}-31`
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT date FROM history_kline
+         WHERE date >= ? AND date <= ?
+         ORDER BY date ASC`,
+      )
+      .all(start, end) as Array<{ date: string }>;
+    return rows.map((r) => r.date);
   }
 
   /**

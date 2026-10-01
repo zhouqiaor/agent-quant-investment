@@ -4,12 +4,13 @@ import { StockController } from './stock.controller';
 import { WatchlistService } from './watchlist.service';
 import { WatchlistController } from './watchlist.controller';
 import { HistoryKlineService } from './history-kline.service';
+import { KLineImporterService } from './kline-importer.service';
 import { PersistenceModule } from '@/persistence/persistence.module';
 
 @Module({
   imports: [PersistenceModule],
-  providers: [StockService, WatchlistService, HistoryKlineService],
+  providers: [StockService, WatchlistService, HistoryKlineService, KLineImporterService],
   controllers: [StockController, WatchlistController],
-  exports: [StockService, WatchlistService, HistoryKlineService],
+  exports: [StockService, WatchlistService, HistoryKlineService, KLineImporterService],
 })
 export class StockModule {}

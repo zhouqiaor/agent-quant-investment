@@ -1,9 +1,25 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { StockService } from './stock.service';
+import { KLineImporterService } from './kline-importer.service';
 
 @Controller('stock')
 export class StockController {
-  constructor(private readonly stockService: StockService) {}
+  constructor(
+    private readonly stockService: StockService,
+    private readonly klineImporter: KLineImporterService,
+  ) {}
+
+  /** 从本地 JSON 文件导入历史 K 线（默认 data/sept-kline.json） */
+  @Post('kline/import')
+  @HttpCode(200)
+  importKline(@Body() body?: { filePath?: string }) {
+    try {
+      const result = this.klineImporter.importLocal(body?.filePath)
+      return { code: 200, msg: 'success', data: result }
+    } catch (e: any) {
+      return { code: 500, msg: e.message ?? 'import failed', data: null }
+    }
+  }
 
   /** 添加自定义股票（A股6位代码，名称可自定义） */
   @Post('custom')

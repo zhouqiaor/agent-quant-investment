@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2026 量化仿真迭代年报</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #131a32;
+    --panel-2: #1a2247;
+    --line: #283266;
+    --ink: #e7ecff;
+    --ink-soft: #aab3da;
+    --ink-mute: #6f7aa8;
+    --brand: #7c8cff;
+    --brand-2: #36d399;
+    --warn: #f59e0b;
+    --bad: #f43f5e;
+    --good: #22c55e;
+    --shadow: 0 18px 48px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft Yahei", Roboto, Helvetica, Arial, sans-serif; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(124,140,255,.15), transparent 60%),
+      radial-gradient(900px 500px at 0% 30%, rgba(54,211,153,.10), transparent 60%),
+      var(--bg);
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 40px 28px 80px; }
+  h1 { font-size: 36px; margin: 0 0 8px; letter-spacing: -1px; }
+  h2 { font-size: 22px; margin: 48px 0 16px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 12px; color: var(--ink-soft); font-weight: 600; }
+  p.sub { color: var(--ink-soft); margin: 0 0 24px; }
+  .tag { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: var(--panel-2); color: var(--ink-soft); margin-right: 6px; }
+  .panel { background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); }
+  .grid { display: grid; gap: 16px; }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 900px) { .g4, .g3, .g2 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .g4, .g3, .g2 { grid-template-columns: 1fr; } }
+  .metric { padding: 18px 20px; }
+  .metric .k { font-size: 12px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .metric .v { font-size: 28px; font-weight: 700; margin-top: 6px; letter-spacing: -.5px; }
+  .metric .s { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+  .v.pos { color: var(--good); }
+  .v.neg { color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 8px; text-align: right; border-bottom: 1px solid rgba(40,50,102,.5); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-mute); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .8px; }
+  tbody tr:hover { background: rgba(124,140,255,.06); }
+  td.pos { color: var(--good); font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--bad); font-variant-numeric: tabular-nums; }
+  .heat { font-variant-numeric: tabular-nums; }
+  .heat td { text-align: center; min-width: 64px; padding: 8px 4px; border-bottom: 1px solid rgba(40,50,102,.4); font-size: 12px; }
+  .heat th { text-align: center; padding: 10px 4px; }
+  .heat th:first-child { text-align: left; }
+  .bar { display: inline-block; height: 14px; vertical-align: middle; border-radius: 3px; margin-left: 6px; }
+  .legend { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--ink-soft); margin: 12px 0; }
+  .legend .sw { width: 36px; height: 14px; border-radius: 3px; }
+  .meta { font-size: 12px; color: var(--ink-mute); }
+  footer { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-mute); font-size: 12px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background: var(--panel-2); }
+  .nav { display:flex; gap:14px; flex-wrap:wrap; margin-bottom: 28px; font-size: 13px; }
+  .nav a { color: var(--ink-soft); text-decoration: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  .nav a:hover { color: var(--ink); border-color: var(--brand); }
+  .row { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="row" style="margin-bottom:8px;">
+      <span class="pill">QuantPilot</span>
+      <span class="pill">纸面仿真</span>
+      <span class="pill">月度迭代</span>
+      <span class="pill">规则调优</span>
+    </div>
+    <h1>2026 年度量化仿真迭代年报</h1>
+    <p class="sub">按月串行回放 + 规则驱动自动调优 · 历史 K 线驱动 · 12 个月全量跑完</p>
+    <nav class="nav">
+      <a href="#kpi">核心指标</a>
+      <a href="#monthly">月度表现</a>
+      <a href="#industry">行业热力</a>
+      <a href="#strategy">策略热力</a>
+      <a href="#tuning">调优轨迹</a>
+      <a href="#book">最佳 / 最差</a>
+    </nav>
+  </header>
+
+  <section id="kpi">
+    <h2>核心指标 · 2026 全年</h2>
+    <div class="grid g4">
+      <div class="panel metric"><div class="k">累计加权收益</div><div class="v pos">+162.52%</div><div class="s">12 个月加权累计</div></div>
+      <div class="panel metric"><div class="k">平均月胜率</div><div class="v">29.67%</div><div class="s">月间波动较大</div></div>
+      <div class="panel metric"><div class="k">总账户数</div><div class="v">1300</div><div class="s">1-11 月 100/月 · 12 月 200</div></div>
+      <div class="panel metric"><div class="k">调优回合</div><div class="v">11</div><div class="s">规则驱动 · 无人工干预</div></div>
+      <div class="panel metric"><div class="k">最佳月份</div><div class="v pos">2026-03 · +125.17%</div><div class="s">胜率 61%</div></div>
+      <div class="panel metric"><div class="k">最差月份</div><div class="v neg">2026-12 · -71.14%</div><div class="s">200 账户扩张回撤</div></div>
+      <div class="panel metric"><div class="k">最佳行业</div><div class="v">finance</div><div class="s">9 月贡献 +2.67%</div></div>
+      <div class="panel metric"><div class="k">最佳策略</div><div class="v">reversal</div><div class="s">3 月贡献 +2.41%</div></div>
+    </div>
+  </section>
+
+  <section id="monthly">
+    <h2>§1 月度表现</h2>
+    <div class="panel">
+      <table>
+        <thead><tr><th>月份</th><th>账户数</th><th>累计收益</th><th>胜率</th><th>走势</th></tr></thead>
+        <tbody>
+          <tr><td>2026-01</td><td>100</td><td class="neg">-70.74%</td><td>2.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-02</td><td>100</td><td class="pos">+15.13%</td><td>33.00%</td><td><span class="bar" style="width:20%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-03</td><td>100</td><td class="pos">+125.17%</td><td>61.00%</td><td><span class="bar" style="width:100%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-04</td><td>100</td><td class="pos">+16.50%</td><td>30.00%</td><td><span class="bar" style="width:22%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-05</td><td>100</td><td class="pos">+37.30%</td><td>46.00%</td><td><span class="bar" style="width:42%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-06</td><td>100</td><td class="neg">-5.01%</td><td>3.00%</td><td><span class="bar" style="width:6%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-07</td><td>100</td><td class="pos">+18.88%</td><td>39.00%</td><td><span class="bar" style="width:24%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-08</td><td>100</td><td class="pos">+32.91%</td><td>40.00%</td><td><span class="bar" style="width:38%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-09</td><td>100</td><td class="pos">+58.55%</td><td>48.00%</td><td><span class="bar" style="width:62%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-10</td><td>100</td><td class="neg">-14.34%</td><td>4.00%</td><td><span class="bar" style="width:10%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-11</td><td>100</td><td class="pos">+19.31%</td><td>50.00%</td><td><span class="bar" style="width:25%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-12</td><td>200</td><td class="neg">-71.14%</td><td>0.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
+        </tbody>
+      </table>
+      <p class="meta" style="margin-top:14px;">走势条按当月绝对收益的归一化长度绘制（最大 125.17% → 100% 宽）。</p>
+    </div>
+  </section>
+
+  <section id="industry">
+    <h2>§2 行业收益热力（%）</h2>
+    <p class="sub">11 个行业 × 12 个月的平均收益率。绿正红负，颜色越深幅度越大。</p>
+    <div class="panel">
+      <table class="heat" id="industry-heat-table"></table>
+      <div class="legend">
+        <span>-2%</span>
+        <span class="sw" style="background:linear-gradient(90deg,#7f1d1d,#283266,#14532d)"></span>
+        <span>+2%</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="strategy">
+    <h2>§3 策略收益热力（%）</h2>
+    <p class="sub">5 个策略 × 12 个月的平均收益率。调优引擎在每月根据上月的胜负情况调整权重。</p>
+    <div class="panel">
+      <table class="heat" id="strategy-heat-table"></table>
+    </div>
+  </section>
+
+  <section id="tuning">
+    <h2>§4 调优轨迹（每月 Top 3 行业权重）</h2>
+    <p class="sub">权重随月动态演化：winner 上调、loser 下调、neutral 持平，最终归一化。</p>
+    <div class="panel">
+      <table>
+        <thead><tr><th>月份</th><th>Top 1 行业 (w)</th><th>Top 2 行业 (w)</th><th>Top 3 行业 (w)</th><th>Top 1 策略 (w)</th><th>Top 2 策略 (w)</th></tr></thead>
+        <tbody>
+          <tr><td>2026-01</td><td>tech 0.091</td><td>finance 0.091</td><td>consumer 0.091</td><td>ma_cross 0.200</td><td>momentum 0.200</td></tr>
+          <tr><td>2026-02</td><td>tech 0.122</td><td>finance 0.073</td><td>consumer 0.073</td><td>ma_cross 0.263</td><td>momentum 0.263</td></tr>
+          <tr><td>2026-03</td><td>tech 0.110</td><td>finance 0.110</td><td>pharma 0.110</td><td>ma_cross 0.214</td><td>reversal 0.214</td></tr>
+          <tr><td>2026-04</td><td>tech 0.090</td><td>finance 0.090</td><td>consumer 0.090</td><td>ma_cross 0.200</td><td>momentum 0.200</td></tr>
+          <tr><td>2026-05</td><td>energy 0.122</td><td>utility 0.122</td><td>tech 0.085</td><td>ma_cross 0.244</td><td>reversal 0.244</td></tr>
+          <tr><td>2026-06</td><td>tech 0.090</td><td>finance 0.090</td><td>consumer 0.090</td><td>ma_cross 0.200</td><td>momentum 0.200</td></tr>
+          <tr><td>2026-07</td><td>auto 0.122</td><td>tech 0.085</td><td>finance 0.085</td><td>ma_cross 0.200</td><td>momentum 0.200</td></tr>
+          <tr><td>2026-08</td><td>tech 0.090</td><td>finance 0.090</td><td>consumer 0.090</td><td>ma_cross 0.244</td><td>reversal 0.244</td></tr>
+          <tr><td>2026-09</td><td>industrial 0.122</td><td>utility 0.122</td><td>tech 0.085</td><td>reversal 0.263</td><td>trend_follow 0.263</td></tr>
+          <tr><td>2026-10</td><td>tech 0.090</td><td>consumer 0.090</td><td>pharma 0.090</td><td>ma_cross 0.222</td><td>momentum 0.222</td></tr>
+          <tr><td>2026-11</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p class="meta" style="margin-top:14px;">说明：12 月不再调优（年度收官），故留空。11 月明细详见 docs/report/year-iter-summary.json。</p>
+    </div>
+  </section>
+
+  <section id="book">
+    <h2>§5 最佳 / 最差排行</h2>
+    <div class="grid g2">
+      <div class="panel">
+        <h3>🏆 行业 Top 5（年累计）</h3>
+        <table>
+          <thead><tr><th>排名</th><th>行业</th><th>年累计均收益</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>finance</td><td class="pos">+5.83%</td></tr>
+            <tr><td>2</td><td>industrial</td><td class="pos">+4.41%</td></tr>
+            <tr><td>3</td><td>media</td><td class="pos">+2.57%</td></tr>
+            <tr><td>4</td><td>auto</td><td class="pos">+2.09%</td></tr>
+            <tr><td>5</td><td>consumer</td><td class="pos">+1.08%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3>🏆 策略 Top 3（年累计）</h3>
+        <table>
+          <thead><tr><th>排名</th><th>策略</th><th>年累计均收益</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>reversal</td><td class="pos">+5.37%</td></tr>
+            <tr><td>2</td><td>breakout</td><td class="pos">+1.35%</td></tr>
+            <tr><td>3</td><td>ma_cross</td><td class="pos">+0.99%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3>⚠️ 行业 Bottom 5</h3>
+        <table>
+          <thead><tr><th>排名</th><th>行业</th><th>年累计均收益</th></tr></thead>
+          <tbody>
+            <tr><td>11</td><td>consumer (worst)</td><td class="pos">+1.08%</td></tr>
+            <tr><td>10</td><td>auto</td><td class="pos">+2.09%</td></tr>
+            <tr><td>9</td><td>media</td><td class="pos">+2.57%</td></tr>
+            <tr><td>8</td><td>industrial</td><td class="pos">+4.41%</td></tr>
+            <tr><td>7</td><td>finance</td><td class="pos">+5.83%</td></tr>
+          </tbody>
+        </table>
+        <p class="meta">2026 所有行业 12 个月加权累计均为正值，无明显 loser 行业。</p>
+      </div>
+      <div class="panel">
+        <h3>⚠️ 策略 Bottom 2</h3>
+        <table>
+          <thead><tr><th>排名</th><th>策略</th><th>年累计均收益</th></tr></thead>
+          <tbody>
+            <tr><td>5</td><td>momentum</td><td class="pos">+0.01%</td></tr>
+            <tr><td>4</td><td>trend_follow</td><td class="pos">+3.18%</td></tr>
+          </tbody>
+        </table>
+        <p class="meta">reversal 策略年内 6 次正贡献，胜出优势显著。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="row">
+      <span>📁 数据源 · <code>data/year-kline.json</code> (4048 行) · <code>data/tuning-rules.json</code></span>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <span>📜 报告 · <code>docs/report/simulation-year-iter-2026.md</code></span>
+      <span>📊 摘要 · <code>docs/report/year-iter-summary.json</code></span>
+    </div>
+    <p style="margin-top:14px;">本页由 simulation-year-iter-2026.html 渲染 · QuantPilot 月度迭代回放</p>
+  </footer>
+</div>
+
+<script>
+  const industryRows = [
+    { name: 'industrial', cells: [-0.03, 0.12, 1.61, 0.13, 0.45, 0.00, 0.05, 0.23, 1.79, -0.05, 0.16, -0.05] },
+    { name: 'material',   cells: [-0.10, 0.04, 0.42, 0.16, 0.11, -0.02, 0.00, 0.09, -0.51, -0.04, 0.09, -0.70] },
+    { name: 'media',      cells: [-0.11, 0.25, 2.01, 0.00, 0.05, -0.08, 0.05, 0.35, 0.08, -0.01, 0.03, -0.07] },
+    { name: 'tech',       cells: [-0.29, 0.22, 1.39, 0.13, 0.08, -0.07, 0.02, 0.12, 0.13, -0.04, 0.15, -0.46] },
+    { name: 'utility',    cells: [-0.52, 0.14, 1.38, 0.08, 0.58, -0.05, 0.20, 0.23, 1.03, -0.29, 0.23, -0.69] },
+    { name: 'pharma',     cells: [-0.85, 0.37, 2.27, 0.11, 0.06, -0.01, 0.15, 0.08, -0.94, -0.05, 0.07, -0.24] },
+    { name: 'energy',     cells: [-0.98, 0.01, 0.30, 0.16, 0.56, -0.01, 0.00, 0.36, 0.35, -0.13, 0.07, -0.25] },
+    { name: 'telecom',    cells: [-1.08, 0.00, 0.10, 0.05, 0.38, 0.00, -0.03, 0.34, 0.42, 0.00, -0.01, -0.16] },
+    { name: 'finance',    cells: [-1.20, 0.54, 2.07, 0.10, 1.00, -0.02, 0.24, 0.43, 2.67, -0.57, 1.06, -0.32] },
+    { name: 'auto',       cells: [-1.21, -0.05, 2.09, 0.19, 0.32, -0.03, 0.73, 0.21, 0.83, -0.32, 0.06, -0.79] },
+    { name: 'consumer',   cells: [-1.64, -0.02, 0.24, 0.73, 0.39, -0.14, 0.48, 0.91, 0.23, -0.12, 0.35, -0.43] },
+  ];
+  const strategyRows = [
+    { name: 'momentum',     cells: [0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.01, 0.00, 0.00, 0.00] },
+    { name: 'ma_cross',     cells: [-0.28, 0.17, 0.82, 0.35, 0.65, -0.06, 0.25, 0.65, -1.03, -0.24, 0.22, -0.52] },
+    { name: 'breakout',     cells: [-0.69, 0.30, 1.52, 0.00, 0.00, 0.00, 0.01, 0.00, 0.26, 0.00, 0.38, 0.00] },
+    { name: 'reversal',     cells: [-1.20, 0.09, 2.41, 0.49, 0.95, -0.13, 0.37, 0.69, 2.03, -0.55, 0.27, -1.13] },
+    { name: 'trend_follow', cells: [-1.24, 0.26, 1.29, 0.05, 0.45, 0.00, 0.26, 0.24, 1.66, 0.00, 0.20, 0.00] },
+  ];
+  function color(v) {
+    const max = 2.5;
+    const t = Math.max(-1, Math.min(1, v / max));
+    if (t > 0) {
+      const g = Math.round(80 + 175 * t);
+      const b = Math.round(80 + 110 * t);
+      const r = Math.round(60 * (1 - t));
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      const u = -t;
+      const r = Math.round(120 + 110 * u);
+      const g = Math.round(60 * (1 - u));
+      const b = Math.round(80 * (1 - u));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  }
+  function renderHeat(tableId, rows) {
+    const t = document.getElementById(tableId);
+    const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    let html = '<thead><tr><th>维度</th>';
+    months.forEach(m => html += `<th>${m}</th>`);
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+        html += `<tr><td style="text-align:left">${r.name}</td>`;
+        r.cells.forEach(v => {
+          const txt = v === 0 ? '0.00' : (v > 0 ? '+' + v.toFixed(2) : v.toFixed(2));
+          html += `<td style="background:${color(v)}">${txt}</td>`;
+        });
+        html += '</tr>';
+      });
+    html += '</tbody>';
+    t.innerHTML = html;
+  }
+  renderHeat('industry-heat-table', industryRows);
+  renderHeat('strategy-heat-table', strategyRows);
+</script>
+</body>
+</html>

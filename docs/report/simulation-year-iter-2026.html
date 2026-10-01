@@ -80,7 +80,13 @@
       <span class="pill">规则调优</span>
     </div>
     <h1>2026 年度量化仿真迭代年报</h1>
-    <p class="sub">按月串行回放 + 规则驱动自动调优 · 历史 K 线驱动 · 12 个月全量跑完</p>
+    <p class="sub">按月串行回放 + 规则驱动自动调优 · 12 个月全量跑完</p>
+    <div class="banner-box">
+      <span class="tag tag-now">📍 当前：2026-10</span>
+      本报告时间口径：<strong>01–09 月 = 仿真回放</strong>（按已生成的 K 线驱动），
+      <strong>10–12 月 = 前瞻模拟</strong>（基于合成 K 线推演未来三个月的策略表现）。
+      其中 12 月为收官月，未进入下一轮调优。
+    </div>
     <nav class="nav">
       <a href="#kpi">核心指标</a>
       <a href="#monthly">月度表现</a>
@@ -97,9 +103,10 @@
       <div class="panel metric"><div class="k">累计加权收益</div><div class="v pos">+162.52%</div><div class="s">12 个月加权累计</div></div>
       <div class="panel metric"><div class="k">平均月胜率</div><div class="v">29.67%</div><div class="s">月间波动较大</div></div>
       <div class="panel metric"><div class="k">总账户数</div><div class="v">1300</div><div class="s">1-11 月 100/月 · 12 月 200</div></div>
-      <div class="panel metric"><div class="k">调优回合</div><div class="v">11</div><div class="s">规则驱动 · 无人工干预</div></div>
-      <div class="panel metric"><div class="k">最佳月份</div><div class="v pos">2026-03 · +125.17%</div><div class="s">胜率 61%</div></div>
-      <div class="panel metric"><div class="k">最差月份</div><div class="v neg">2026-12 · -71.14%</div><div class="s">200 账户扩张回撤</div></div>
+      <div class="panel metric"><div class="k">回放 vs 前瞻</div><div class="v">9 : 3</div><div class="s">历史 9 月 + 未来 3 月</div></div>
+      <div class="panel metric"><div class="k">调优回合</div><div class="v">10</div><div class="s">回放 9 次 · 前瞻 1 次（10→11）</div></div>
+      <div class="panel metric"><div class="k">最佳月份</div><div class="v pos">2026-03 · +125.17%</div><div class="s">胜率 61% · 回放</div></div>
+      <div class="panel metric"><div class="k">最差月份</div><div class="v neg">2026-12 · -71.14%</div><div class="s">200 账户扩张回撤 · 前瞻</div></div>
       <div class="panel metric"><div class="k">最佳行业</div><div class="v">finance</div><div class="s">9 月贡献 +2.67%</div></div>
       <div class="panel metric"><div class="k">最佳策略</div><div class="v">reversal</div><div class="s">3 月贡献 +2.41%</div></div>
     </div>
@@ -111,18 +118,18 @@
       <table>
         <thead><tr><th>月份</th><th>账户数</th><th>累计收益</th><th>胜率</th><th>走势</th></tr></thead>
         <tbody>
-          <tr><td>2026-01</td><td>100</td><td class="neg">-70.74%</td><td>2.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
-          <tr><td>2026-02</td><td>100</td><td class="pos">+15.13%</td><td>33.00%</td><td><span class="bar" style="width:20%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-03</td><td>100</td><td class="pos">+125.17%</td><td>61.00%</td><td><span class="bar" style="width:100%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-04</td><td>100</td><td class="pos">+16.50%</td><td>30.00%</td><td><span class="bar" style="width:22%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-05</td><td>100</td><td class="pos">+37.30%</td><td>46.00%</td><td><span class="bar" style="width:42%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-06</td><td>100</td><td class="neg">-5.01%</td><td>3.00%</td><td><span class="bar" style="width:6%; background:var(--bad)"></span></td></tr>
-          <tr><td>2026-07</td><td>100</td><td class="pos">+18.88%</td><td>39.00%</td><td><span class="bar" style="width:24%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-08</td><td>100</td><td class="pos">+32.91%</td><td>40.00%</td><td><span class="bar" style="width:38%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-09</td><td>100</td><td class="pos">+58.55%</td><td>48.00%</td><td><span class="bar" style="width:62%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-10</td><td>100</td><td class="neg">-14.34%</td><td>4.00%</td><td><span class="bar" style="width:10%; background:var(--bad)"></span></td></tr>
-          <tr><td>2026-11</td><td>100</td><td class="pos">+19.31%</td><td>50.00%</td><td><span class="bar" style="width:25%; background:var(--good)"></span></td></tr>
-          <tr><td>2026-12</td><td>200</td><td class="neg">-71.14%</td><td>0.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-01 <span class="tag tag-past">回放</span></td><td>100</td><td class="neg">-70.74%</td><td>2.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-02 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+15.13%</td><td>33.00%</td><td><span class="bar" style="width:20%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-03 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+125.17%</td><td>61.00%</td><td><span class="bar" style="width:100%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-04 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+16.50%</td><td>30.00%</td><td><span class="bar" style="width:22%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-05 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+37.30%</td><td>46.00%</td><td><span class="bar" style="width:42%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-06 <span class="tag tag-past">回放</span></td><td>100</td><td class="neg">-5.01%</td><td>3.00%</td><td><span class="bar" style="width:6%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-07 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+18.88%</td><td>39.00%</td><td><span class="bar" style="width:24%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-08 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+32.91%</td><td>40.00%</td><td><span class="bar" style="width:38%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-09 <span class="tag tag-past">回放</span></td><td>100</td><td class="pos">+58.55%</td><td>48.00%</td><td><span class="bar" style="width:62%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-10 <span class="tag tag-future">前瞻</span></td><td>100</td><td class="neg">-14.34%</td><td>4.00%</td><td><span class="bar" style="width:10%; background:var(--bad)"></span></td></tr>
+          <tr><td>2026-11 <span class="tag tag-future">前瞻</span></td><td>100</td><td class="pos">+19.31%</td><td>50.00%</td><td><span class="bar" style="width:25%; background:var(--good)"></span></td></tr>
+          <tr><td>2026-12 <span class="tag tag-future">前瞻</span></td><td>200</td><td class="neg">-71.14%</td><td>0.00%</td><td><span class="bar" style="width:0%; background:var(--bad)"></span></td></tr>
         </tbody>
       </table>
       <p class="meta" style="margin-top:14px;">走势条按当月绝对收益的归一化长度绘制（最大 125.17% → 100% 宽）。</p>
@@ -166,8 +173,8 @@
           <tr><td>2026-07</td><td>auto 0.122</td><td>tech 0.085</td><td>finance 0.085</td><td>ma_cross 0.200</td><td>momentum 0.200</td></tr>
           <tr><td>2026-08</td><td>tech 0.090</td><td>finance 0.090</td><td>consumer 0.090</td><td>ma_cross 0.244</td><td>reversal 0.244</td></tr>
           <tr><td>2026-09</td><td>industrial 0.122</td><td>utility 0.122</td><td>tech 0.085</td><td>reversal 0.263</td><td>trend_follow 0.263</td></tr>
-          <tr><td>2026-10</td><td>tech 0.090</td><td>consumer 0.090</td><td>pharma 0.090</td><td>ma_cross 0.222</td><td>momentum 0.222</td></tr>
-          <tr><td>2026-11</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>2026-10 <span class="tag tag-future">前瞻</span></td><td>tech 0.090</td><td>consumer 0.090</td><td>pharma 0.090</td><td>ma_cross 0.222</td><td>momentum 0.222</td></tr>
+          <tr><td>2026-11 <span class="tag tag-future">前瞻</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
         </tbody>
       </table>
       <p class="meta" style="margin-top:14px;">说明：12 月不再调优（年度收官），故留空。11 月明细详见 docs/report/year-iter-summary.json。</p>

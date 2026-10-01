@@ -5,6 +5,8 @@ import { SimulationScheduler } from './simulation.scheduler'
 import { SimulationReportService } from './simulation-report.service'
 import { MarkdownReportRenderer } from './markdown-report.service'
 import { PersistenceService } from '../persistence/persistence.service'
+import { StrategyTunerService } from './strategy-tuner.service'
+import { YearReportService } from './year-report.service'
 
 @Controller('simulation')
 export class SimulationController {
@@ -14,6 +16,8 @@ export class SimulationController {
     private readonly report: SimulationReportService,
     private readonly markdown: MarkdownReportRenderer,
     private readonly persistence: PersistenceService,
+    private readonly tuner: StrategyTunerService,
+    private readonly yearReportSvc: YearReportService,
   ) {}
 
   /**
@@ -30,6 +34,10 @@ export class SimulationController {
     capitalMax?: number
     replayTickMs?: number
     name?: string
+    industryWeights?: Record<string, number>
+    strategyWeights?: Record<string, number>
+    watchlist?: string[]
+    capitalTierWeights?: Record<string, number>
   }) {
     if (!body.month || !/^\d{4}-\d{2}$/.test(body.month)) {
       return { code: 400, msg: 'month 必须为 YYYY-MM 格式', data: null }
@@ -45,6 +53,10 @@ export class SimulationController {
       accountCount: body.accountCount ?? 100,
       capitalMin: body.capitalMin ?? 10_000,
       capitalMax: body.capitalMax ?? 1_000_000,
+      industryWeights: body.industryWeights,
+      strategyWeights: body.strategyWeights,
+      watchlist: body.watchlist,
+      capitalTierWeights: body.capitalTierWeights,
     }
     this.persistence.saveSimulationRun({
       id: runId,
@@ -54,7 +66,12 @@ export class SimulationController {
       strategies: [],
       status: 'created',
       startedAt: Date.now(),
-      config: { ...cfg, month: body.month, priceSource: 'history', replayTickMs: body.replayTickMs ?? 60_000 },
+      config: {
+        ...cfg,
+        month: body.month,
+        priceSource: 'history',
+        replayTickMs: body.replayTickMs ?? 60_000,
+      },
     })
     const accounts = await this.factory.createBatch(runId, cfg)
     this.scheduler.start(runId, {
@@ -189,5 +206,41 @@ export class SimulationController {
     }
     const md = this.markdown.render(id)
     res.type('text/markdown; charset=utf-8').send(md)
+  }
+
+  /** 自动调优：基于某月 run 的产出生成下一轮的 industryWeights / strategyWeights */
+  @Post('strategy-tune')
+  @HttpCode(200)
+  async tuneStrategy(@Body() body: { runId: string }) {
+    if (!body.runId) return { code: 400, msg: 'runId required', data: null }
+    const result = this.tuner.tuneFromRun(body.runId)
+    return {
+      data: {
+        runId: body.runId,
+        industryWeights: result.industryWeights,
+        strategyWeights: result.strategyWeights,
+        watchlist: result.watchlist,
+        diagnostics: result.diagnostics,
+      },
+    }
+  }
+
+  /** 年度汇总报告：跨多个月度 run 聚合产出 Markdown */
+  @Get('year-report')
+  async yearReport() {
+    const runs = await this.yearReportSvc.aggregate()
+    const markdown = this.yearReportSvc.renderMarkdown(runs)
+    return { data: { runCount: runs.length, markdown } }
+  }
+
+  /** Markdown 形式直接下载 */
+  @Get('year-report.md')
+  yearReportMarkdown(@Res() res: ExpressResp) {
+    this.yearReportSvc.aggregate().then((runs) => {
+      const md = this.yearReportSvc.renderMarkdown(runs)
+      res.type('text/markdown; charset=utf-8').send(md)
+    }).catch((e) => {
+      res.status(500).type('text/plain').send(`err: ${e?.message ?? e}`)
+    })
   }
 }

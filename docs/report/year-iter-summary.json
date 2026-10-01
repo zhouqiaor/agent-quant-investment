@@ -1,0 +1,338 @@
+[
+  {
+    "month": "2026-01",
+    "runId": "sim_mupi0hdh",
+    "durationMs": 30090,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 1,
+      "finance": 1,
+      "consumer": 1,
+      "pharma": 1,
+      "energy": 1,
+      "industrial": 1,
+      "material": 1,
+      "utility": 1,
+      "telecom": 1,
+      "auto": 1,
+      "media": 1
+    },
+    "strategyWeights": {
+      "ma_cross": 1,
+      "momentum": 1,
+      "reversal": 1,
+      "breakout": 1,
+      "trend_follow": 1
+    }
+  },
+  {
+    "month": "2026-02",
+    "runId": "sim_mupi14l8",
+    "durationMs": 24057,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.1219512195121951,
+      "finance": 0.07317073170731705,
+      "consumer": 0.07317073170731705,
+      "pharma": 0.07317073170731705,
+      "energy": 0.07317073170731705,
+      "industrial": 0.1219512195121951,
+      "material": 0.1219512195121951,
+      "utility": 0.07317073170731705,
+      "telecom": 0.07317073170731705,
+      "auto": 0.07317073170731705,
+      "media": 0.1219512195121951
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2631578947368421,
+      "momentum": 0.2631578947368421,
+      "reversal": 0.15789473684210525,
+      "breakout": 0.15789473684210525,
+      "trend_follow": 0.15789473684210525
+    }
+  },
+  {
+    "month": "2026-03",
+    "runId": "sim_mupi1n5o",
+    "durationMs": 33071,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.08771929824561402,
+      "finance": 0.12280701754385961,
+      "consumer": 0.08771929824561402,
+      "pharma": 0.08771929824561402,
+      "energy": 0.08771929824561402,
+      "industrial": 0.08771929824561402,
+      "material": 0.08771929824561402,
+      "utility": 0.08771929824561402,
+      "telecom": 0.08771929824561402,
+      "auto": 0.08771929824561402,
+      "media": 0.08771929824561402
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2,
+      "momentum": 0.2,
+      "reversal": 0.2,
+      "breakout": 0.2,
+      "trend_follow": 0.2
+    }
+  },
+  {
+    "month": "2026-04",
+    "runId": "sim_mupi2coj",
+    "durationMs": 33071,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.1076923076923077,
+      "finance": 0.1076923076923077,
+      "consumer": 0.07692307692307694,
+      "pharma": 0.1076923076923077,
+      "energy": 0.07692307692307694,
+      "industrial": 0.1076923076923077,
+      "material": 0.07692307692307694,
+      "utility": 0.1076923076923077,
+      "telecom": 0.07692307692307694,
+      "auto": 0.07692307692307694,
+      "media": 0.07692307692307694
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2121212121212121,
+      "momentum": 0.15151515151515152,
+      "reversal": 0.2121212121212121,
+      "breakout": 0.2121212121212121,
+      "trend_follow": 0.2121212121212121
+    }
+  },
+  {
+    "month": "2026-05",
+    "runId": "sim_mupi327b",
+    "durationMs": 30055,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.0909090909090909,
+      "finance": 0.0909090909090909,
+      "consumer": 0.0909090909090909,
+      "pharma": 0.0909090909090909,
+      "energy": 0.0909090909090909,
+      "industrial": 0.0909090909090909,
+      "material": 0.0909090909090909,
+      "utility": 0.0909090909090909,
+      "telecom": 0.0909090909090909,
+      "auto": 0.0909090909090909,
+      "media": 0.0909090909090909
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2,
+      "momentum": 0.2,
+      "reversal": 0.2,
+      "breakout": 0.2,
+      "trend_follow": 0.2
+    }
+  },
+  {
+    "month": "2026-06",
+    "runId": "sim_mupi3pec",
+    "durationMs": 33070,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.0847457627118644,
+      "finance": 0.0847457627118644,
+      "consumer": 0.0847457627118644,
+      "pharma": 0.0847457627118644,
+      "energy": 0.11864406779661016,
+      "industrial": 0.0847457627118644,
+      "material": 0.0847457627118644,
+      "utility": 0.11864406779661016,
+      "telecom": 0.0847457627118644,
+      "auto": 0.0847457627118644,
+      "media": 0.0847457627118644
+    },
+    "strategyWeights": {
+      "ma_cross": 0.24137931034482757,
+      "momentum": 0.1724137931034483,
+      "reversal": 0.24137931034482757,
+      "breakout": 0.1724137931034483,
+      "trend_follow": 0.1724137931034483
+    }
+  },
+  {
+    "month": "2026-07",
+    "runId": "sim_mupi4ex7",
+    "durationMs": 33072,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.0909090909090909,
+      "finance": 0.0909090909090909,
+      "consumer": 0.0909090909090909,
+      "pharma": 0.0909090909090909,
+      "energy": 0.0909090909090909,
+      "industrial": 0.0909090909090909,
+      "material": 0.0909090909090909,
+      "utility": 0.0909090909090909,
+      "telecom": 0.0909090909090909,
+      "auto": 0.0909090909090909,
+      "media": 0.0909090909090909
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2,
+      "momentum": 0.2,
+      "reversal": 0.2,
+      "breakout": 0.2,
+      "trend_follow": 0.2
+    }
+  },
+  {
+    "month": "2026-08",
+    "runId": "sim_mupi54g1",
+    "durationMs": 30063,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.08771929824561403,
+      "finance": 0.08771929824561403,
+      "consumer": 0.08771929824561403,
+      "pharma": 0.08771929824561403,
+      "energy": 0.08771929824561403,
+      "industrial": 0.08771929824561403,
+      "material": 0.08771929824561403,
+      "utility": 0.08771929824561403,
+      "telecom": 0.08771929824561403,
+      "auto": 0.12280701754385963,
+      "media": 0.08771929824561403
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2,
+      "momentum": 0.2,
+      "reversal": 0.2,
+      "breakout": 0.2,
+      "trend_follow": 0.2
+    }
+  },
+  {
+    "month": "2026-09",
+    "runId": "sim_mupi5rn8",
+    "durationMs": 39073,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.0909090909090909,
+      "finance": 0.0909090909090909,
+      "consumer": 0.0909090909090909,
+      "pharma": 0.0909090909090909,
+      "energy": 0.0909090909090909,
+      "industrial": 0.0909090909090909,
+      "material": 0.0909090909090909,
+      "utility": 0.0909090909090909,
+      "telecom": 0.0909090909090909,
+      "auto": 0.0909090909090909,
+      "media": 0.0909090909090909
+    },
+    "strategyWeights": {
+      "ma_cross": 0.24137931034482757,
+      "momentum": 0.1724137931034483,
+      "reversal": 0.24137931034482757,
+      "breakout": 0.1724137931034483,
+      "trend_follow": 0.1724137931034483
+    }
+  },
+  {
+    "month": "2026-10",
+    "runId": "sim_mupi6lsq",
+    "durationMs": 30106,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.08771929824561403,
+      "finance": 0.08771929824561403,
+      "consumer": 0.08771929824561403,
+      "pharma": 0.05263157894736842,
+      "energy": 0.08771929824561403,
+      "industrial": 0.12280701754385963,
+      "material": 0.08771929824561403,
+      "utility": 0.12280701754385963,
+      "telecom": 0.08771929824561403,
+      "auto": 0.08771929824561403,
+      "media": 0.08771929824561403
+    },
+    "strategyWeights": {
+      "ma_cross": 0.1111111111111111,
+      "momentum": 0.18518518518518517,
+      "reversal": 0.2592592592592592,
+      "breakout": 0.18518518518518517,
+      "trend_follow": 0.2592592592592592
+    }
+  },
+  {
+    "month": "2026-11",
+    "runId": "sim_mupi7919",
+    "durationMs": 30077,
+    "totalAccounts": 100,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.09433962264150941,
+      "finance": 0.05660377358490565,
+      "consumer": 0.09433962264150941,
+      "pharma": 0.09433962264150941,
+      "energy": 0.09433962264150941,
+      "industrial": 0.09433962264150941,
+      "material": 0.09433962264150941,
+      "utility": 0.09433962264150941,
+      "telecom": 0.09433962264150941,
+      "auto": 0.09433962264150941,
+      "media": 0.09433962264150941
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2173913043478261,
+      "momentum": 0.2173913043478261,
+      "reversal": 0.13043478260869565,
+      "breakout": 0.2173913043478261,
+      "trend_follow": 0.2173913043478261
+    }
+  },
+  {
+    "month": "2026-12",
+    "runId": "sim_mupi7w8x",
+    "durationMs": 66141,
+    "totalAccounts": 200,
+    "aggregateReturn": 0,
+    "winRate": 0,
+    "industryWeights": {
+      "tech": 0.08771929824561402,
+      "finance": 0.12280701754385961,
+      "consumer": 0.08771929824561402,
+      "pharma": 0.08771929824561402,
+      "energy": 0.08771929824561402,
+      "industrial": 0.08771929824561402,
+      "material": 0.08771929824561402,
+      "utility": 0.08771929824561402,
+      "telecom": 0.08771929824561402,
+      "auto": 0.08771929824561402,
+      "media": 0.08771929824561402
+    },
+    "strategyWeights": {
+      "ma_cross": 0.2,
+      "momentum": 0.2,
+      "reversal": 0.2,
+      "breakout": 0.2,
+      "trend_follow": 0.2
+    }
+  }
+]

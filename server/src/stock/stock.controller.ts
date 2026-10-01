@@ -9,12 +9,12 @@ export class StockController {
     private readonly klineImporter: KLineImporterService,
   ) {}
 
-  /** 从本地 JSON 文件导入历史 K 线（默认 data/sept-kline.json） */
+  /** 从本地 JSON 文件导入历史 K 线（dataset=sept|year, month 可选） */
   @Post('kline/import')
   @HttpCode(200)
-  importKline(@Body() body?: { filePath?: string }) {
+  importKline(@Body() body?: { dataset?: 'sept' | 'year'; month?: string }) {
     try {
-      const result = this.klineImporter.importLocal(body?.filePath)
+      const result = this.klineImporter.importLocal({ dataset: body?.dataset, month: body?.month })
       return { code: 200, msg: 'success', data: result }
     } catch (e: any) {
       return { code: 500, msg: e.message ?? 'import failed', data: null }

@@ -18,6 +18,14 @@ export interface SimulationConfig {
   capitalMin?: number
   capitalMax?: number
   industriesPerAccount?: [number, number]
+  /** 月度迭代用：按权重的行业抽样 */
+  industryWeights?: Record<string, number>
+  /** 月度迭代用：按权重的策略抽样 */
+  strategyWeights?: Record<string, number>
+  /** 月度迭代用：覆盖生成的 watchlist */
+  watchlist?: string[]
+  /** 月度迭代用：资金档位权重 (small/medium/large) */
+  capitalTierWeights?: Record<string, number>
 }
 
 export interface SimAccountTemplate {
@@ -38,9 +46,16 @@ export interface SimAccountTemplate {
   watchlist: string[]
 }
 
+const TIER_BOUNDS: Record<string, [number, number]> = {
+  small: [10_000, 99_999],
+  medium: [100_000, 499_999],
+  large: [500_000, 5_000_000],
+}
+
 /**
  * 100 账户仿真 — 工厂
  * 一次性创建 N 个虚拟账户，每个随机分配资金/行业/策略/参数
+ * 月度迭代模式下可传 industryWeights/strategyWeights/watchlist 覆盖默认均匀分布
  */
 @Injectable()
 export class SimulationFactory {
@@ -64,15 +79,38 @@ export class SimulationFactory {
     const [indMin, indMax] = config.industriesPerAccount ?? [1, 3]
     const riskWeights = [0.2, 0.6, 0.2]
 
+    // 加权抽样辅助
+    const industryCodes = industries.map(i => i.code)
+    const industryWeights = config.industryWeights
+      ? industries.map(i => config.industryWeights![i.code] ?? 0)
+      : industries.map(() => 1 / industries.length)
+    const strategyWeights = config.strategyWeights
+      ? strategies.map(s => config.strategyWeights![s] ?? 0)
+      : strategies.map(() => 1 / strategies.length)
+
+    const tierWeights = config.capitalTierWeights ?? { small: 0.4, medium: 0.4, large: 0.2 }
+    const tierKeys = Object.keys(tierWeights)
+    const tierWeightArr = tierKeys.map(k => tierWeights[k])
+
     const accounts: SimAccountTemplate[] = []
 
     for (let seq = 0; seq < count; seq++) {
-      // 资金：log-uniform，让分布更接近真实（小额账户多）
-      const initialCapital = Math.round(logUniform(capitalMin, capitalMax) / 1000) * 1000
+      // 资金：根据 capitalTierWeights 选档位，再 log-uniform
+      const tier = weightedPick(tierKeys, tierWeightArr) as string
+      const [tMin, tMax] = TIER_BOUNDS[tier] ?? [capitalMin, capitalMax]
+      const initialCapital = Math.round(logUniform(tMin, tMax) / 1000) * 1000
+
+      // 行业加权
       const industryCount = Math.floor(uniform(indMin, indMax + 1))
-      const picked = this.pickN(industries, industryCount)
-      const watchlist = Array.from(new Set(picked.flatMap(p => [...p.stocks])))
-      const strategy = strategies[Math.floor(Math.random() * strategies.length)]
+      const picked = this.pickWeightedN(industries, industryCount, industryWeights)
+      // watchlist：优先用 config.watchlist，其次按行业股票池
+      const watchlist = (config.watchlist && config.watchlist.length > 0)
+        ? [...config.watchlist]
+        : Array.from(new Set(picked.flatMap(p => [...p.stocks])))
+
+      // 策略加权
+      const strategy = weightedPick(strategies, strategyWeights) as StrategyCode
+
       const risk = weightedPick([...RISK_PREFERENCES], riskWeights) as RiskPreference
       const baseParams = STRATEGY_BASE_PARAMS[strategy]
       const params = perturbParams(baseParams, risk === 'aggressive' ? 0.3 : risk === 'conservative' ? 0.1 : 0.2)
@@ -112,7 +150,8 @@ export class SimulationFactory {
       })
     }
 
-    this.logger.log(`创建 ${accounts.length} 个仿真账户（run=${runId}）`)
+    const weighted = !!(config.industryWeights || config.strategyWeights)
+    this.logger.log(`创建 ${accounts.length} 个仿真账户（run=${runId}${weighted ? ', 加权模式' : ''}）`)
     return accounts
   }
 
@@ -122,6 +161,27 @@ export class SimulationFactory {
     for (let i = 0; i < n && copy.length > 0; i++) {
       const idx = Math.floor(Math.random() * copy.length)
       out.push(copy.splice(idx, 1)[0])
+    }
+    return out
+  }
+
+  /**
+   * 加权抽样 N 个不重复元素
+   * 通过对索引数组加权抽样实现不重复
+   */
+  private pickWeightedN<T extends { code: string }>(
+    arr: readonly T[],
+    n: number,
+    weights: number[],
+  ): T[] {
+    const copy = [...arr]
+    const copyWeights = [...weights]
+    const out: T[] = []
+    for (let i = 0; i < n && copy.length > 0; i++) {
+      const indices = copy.map((_, idx) => idx)
+      const idx = weightedPick(indices, copyWeights)
+      out.push(copy.splice(idx, 1)[0])
+      copyWeights.splice(idx, 1)
     }
     return out
   }

@@ -1,0 +1,38 @@
+{
+  "comment": "策略调优规则 - 月度迭代仿真用",
+  "version": "1.0.0",
+  "thresholds": {
+    "winnerMinWinRate": 0.55,
+    "winnerMinMeanReturn": 0.005,
+    "loserMaxWinRate": 0.35,
+    "loserMaxMeanReturn": -0.005,
+    "neutralMinWinRate": 0.35,
+    "neutralMaxWinRate": 0.55
+  },
+  "weightAdjustments": {
+    "winnerMultiplier": 1.4,
+    "loserMultiplier": 0.6,
+    "neutralMultiplier": 1.0
+  },
+  "bounds": {
+    "minWeight": 0.05,
+    "maxWeight": 0.6
+  },
+  "watchlist": {
+    "baseSize": 5,
+    "carryTopN": 3,
+    "randomizeEachMonth": 5
+  },
+  "capitalTierWeights": {
+    "small": 0.4,
+    "medium": 0.4,
+    "large": 0.2
+  },
+  "industries": [
+    "tech", "finance", "consumer", "pharma", "energy",
+    "industrial", "material", "utility", "telecom", "auto", "media"
+  ],
+  "strategies": [
+    "ma_cross", "momentum", "reversal", "breakout", "trend_follow"
+  ]
+}

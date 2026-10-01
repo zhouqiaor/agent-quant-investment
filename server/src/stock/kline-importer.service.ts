@@ -11,11 +11,14 @@ export interface KlineImportResult {
   skipped: number
   errors: string[]
   sampleSymbols: string[]
+  dataset: 'sept' | 'year'
+  monthFilter?: string
 }
 
 /**
  * K 线导入器（本地 JSON → history_kline）
- * - 约定路径：data/sept-kline.json（项目级 mock）
+ * - dataset: 'sept'（默认，data/sept-kline.json） | 'year'（data/year-kline.json）
+ * - month: 可选，YYYY-MM 月份过滤（仅 year 模式生效）
  * - 格式：{ rows: [{ symbol, date, open, high, low, close, volume }, ...] }
  * - 行为：INSERT OR IGNORE（已存在则跳过，幂等）
  * - 校验：OHLC 合法性 + 高低包络 + 必填字段
@@ -23,35 +26,45 @@ export interface KlineImportResult {
 @Injectable()
 export class KLineImporterService {
   private readonly logger = new Logger(KLineImporterService.name)
-  // 多路径兜底：项目根 / server 子目录 / 临时目录
-  private readonly DEFAULT_PATHS = [
-    resolve(process.cwd(), 'data/sept-kline.json'),
-    resolve(process.cwd(), '../data/sept-kline.json'),
-    resolve(process.cwd(), 'server/data/sept-kline.json'),
-  ]
+  private readonly PATHS: Record<string, string[]> = {
+    sept: [
+      resolve(process.cwd(), 'data/sept-kline.json'),
+      resolve(process.cwd(), '../data/sept-kline.json'),
+      resolve(process.cwd(), 'server/data/sept-kline.json'),
+    ],
+    year: [
+      resolve(process.cwd(), 'data/year-kline.json'),
+      resolve(process.cwd(), '../data/year-kline.json'),
+      resolve(process.cwd(), 'server/data/year-kline.json'),
+    ],
+  }
 
   constructor(private readonly persistence: PersistenceService) {}
 
   /**
    * 从本地 JSON 文件导入 K 线
-   * @param filePath 可选，自定义路径；默认按 DEFAULT_PATHS 顺序查找
+   * @param opts.dataset 'sept' | 'year'，默认 sept
+   * @param opts.month 可选月份过滤（YYYY-MM），仅 year 模式生效
    */
-  importLocal(filePath?: string): KlineImportResult {
-    let file = filePath
+  importLocal(opts: { dataset?: 'sept' | 'year'; month?: string } = {}): KlineImportResult {
+    const dataset = opts.dataset ?? 'sept'
+    const month = opts.month
+    const candidates = this.PATHS[dataset]
+    const file = candidates.find((p) => existsSync(p))
     if (!file) {
-      const found = DEFAULT_PATHS_SEARCH(this.DEFAULT_PATHS)
-      if (!found) {
-        throw new Error(`K线文件不存在: 已尝试 ${this.DEFAULT_PATHS.join(', ')}`)
-      }
-      file = found
-    } else if (!existsSync(file)) {
-      throw new Error(`K线文件不存在: ${file}`)
+      throw new Error(`K线文件不存在 (dataset=${dataset}): 已尝试 ${candidates.join(', ')}`)
     }
 
     const raw = JSON.parse(readFileSync(file, 'utf-8'))
-    const rows = raw.rows
+    let rows = raw.rows
     if (!Array.isArray(rows)) {
       throw new Error(`K线文件格式错误: rows 字段缺失或非数组`)
+    }
+
+    if (month && dataset === 'year') {
+      const before = rows.length
+      rows = rows.filter((r: any) => r.date && r.date.startsWith(`${month}-`))
+      this.logger.log(`月份过滤: dataset=${dataset} month=${month} ${before} → ${rows.length} 行`)
     }
 
     const errors: string[] = []
@@ -69,20 +82,21 @@ export class KLineImporterService {
       symbolSet.add(r.symbol)
     }
 
-    // 落库（INSERT OR IGNORE）
     const before = this.db.prepare('SELECT COUNT(*) as n FROM history_kline').get() as { n: number }
     this.persistence.upsertHistoryKline(
-      valid.map((r) => ({ ...r, source: 'local-import' })),
+      valid.map((r) => ({ ...r, source: dataset === 'year' ? 'year-import' : 'local-import' })),
     )
     const after = this.db.prepare('SELECT COUNT(*) as n FROM history_kline').get() as { n: number }
     const inserted = after.n - before.n
     const skipped = valid.length - inserted
 
-    this.logger.log(`K线导入完成: file=${file} total=${valid.length} inserted=${inserted} skipped=${skipped} errors=${errors.length}`)
+    this.logger.log(`K线导入完成: dataset=${dataset} month=${month ?? '-'} total=${valid.length} inserted=${inserted} skipped=${skipped} errors=${errors.length}`)
 
     return {
       source: 'local',
       file,
+      dataset,
+      monthFilter: month,
       totalRows: valid.length,
       inserted,
       skipped,
@@ -109,11 +123,4 @@ export class KLineImporterService {
   private get db() {
     return (this.persistence as any).db
   }
-}
-
-function DEFAULT_PATHS_SEARCH(paths: string[]): string | null {
-  for (const p of paths) {
-    if (existsSync(p)) return p
-  }
-  return null
 }

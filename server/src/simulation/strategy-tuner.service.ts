@@ -74,8 +74,15 @@ export class StrategyTunerService {
 
     // 套用规则
     const rulesApplied: any[] = []
-    const industryWeights = this.applyRules(rules, industryStats, 'industry', rulesApplied)
+    let industryWeights = this.applyRules(rules, industryStats, 'industry', rulesApplied)
     const strategyWeights = this.applyRules(rules, strategyStats, 'strategy', rulesApplied)
+
+    // 跨行业相关性约束：单行业上限 + Top-3 上限 + L1 收敛
+    const constrained = this.applyConcentrationConstraint(rules, industryWeights)
+    if (constrained.changed) {
+      industryWeights = constrained.weights
+      for (const e of constrained.events) rulesApplied.push(e)
+    }
 
     // Watchlist: 取上月 Top3 盈利股票 + 随机补足
     const topAccByPnl = [...enriched].sort((a, b) => b.pnlRate - a.pnlRate).slice(0, 3)
@@ -207,6 +214,41 @@ export class StrategyTunerService {
 
   private clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, v))
+  }
+
+  private applyConcentrationConstraint(
+    rules: any,
+    weights: Record<string, number>,
+  ): { weights: Record<string, number>; changed: boolean; events: any[] } {
+    const cap = rules.concentration ?? { perIndustryMax: 0.25, top3Max: 0.6 }
+    const events: any[] = []
+    let changed = false
+    const capped: Record<string, number> = { ...weights }
+    for (const [k, v] of Object.entries(capped)) {
+      if (v > cap.perIndustryMax) {
+        events.push({
+          code: k, type: 'cap-per-industry', oldWeight: v, newWeight: cap.perIndustryMax,
+          reason: `单行业上限 ${(cap.perIndustryMax * 100).toFixed(0)}%`,
+        })
+        capped[k] = cap.perIndustryMax
+        changed = true
+      }
+    }
+    const top3 = Object.entries(capped).sort((a, b) => b[1] - a[1]).slice(0, 3)
+    const top3Sum = top3.reduce((s, [, v]) => s + v, 0)
+    if (top3Sum > cap.top3Max) {
+      const scale = cap.top3Max / top3Sum
+      for (const [k, v] of top3) {
+        const newW = v * scale
+        events.push({ code: k, type: 'cap-top3', oldWeight: v, newWeight: newW, reason: `Top3 上限 ${(cap.top3Max * 100).toFixed(0)}%` })
+        capped[k] = newW
+        changed = true
+      }
+    }
+    const sum = Object.values(capped).reduce((s, v) => s + v, 0)
+    const normalized: Record<string, number> = {}
+    for (const [k, v] of Object.entries(capped)) normalized[k] = v / sum
+    return { weights: normalized, changed, events }
   }
 
   private loadRules(): any {

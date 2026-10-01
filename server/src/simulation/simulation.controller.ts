@@ -7,6 +7,7 @@ import { MarkdownReportRenderer } from './markdown-report.service'
 import { PersistenceService } from '../persistence/persistence.service'
 import { StrategyTunerService } from './strategy-tuner.service'
 import { YearReportService } from './year-report.service'
+import { MetaTunerService } from './meta-tuner.service'
 
 @Controller('simulation')
 export class SimulationController {
@@ -18,6 +19,7 @@ export class SimulationController {
     private readonly persistence: PersistenceService,
     private readonly tuner: StrategyTunerService,
     private readonly yearReportSvc: YearReportService,
+    private readonly metaTunerSvc: MetaTunerService,
   ) {}
 
   /**
@@ -57,6 +59,7 @@ export class SimulationController {
       strategyWeights: body.strategyWeights,
       watchlist: body.watchlist,
       capitalTierWeights: body.capitalTierWeights,
+      seed: body.seed,
     }
     this.persistence.saveSimulationRun({
       id: runId,
@@ -230,7 +233,7 @@ export class SimulationController {
   async yearReport() {
     const runs = await this.yearReportSvc.aggregate()
     const markdown = this.yearReportSvc.renderMarkdown(runs)
-    return { data: { runCount: runs.length, markdown } }
+    return { data: { runCount: runs.length, markdown, summaries: runs } }
   }
 
   /** Markdown 形式直接下载 */
@@ -242,5 +245,14 @@ export class SimulationController {
     }).catch((e) => {
       res.status(500).type('text/plain').send(`err: ${e?.message ?? e}`)
     })
+  }
+
+  @Post('strategy-meta-tune')
+  async metaTune(@Body() body: { steps?: number; stepSize?: number; objective?: 'calmar' | 'sharpe' | 'sortino'; runIds?: string[] } = {}) {
+    const result = this.metaTunerSvc.optimize(
+      { steps: body.steps, stepSize: body.stepSize, objective: body.objective },
+      { runIds: body.runIds },
+    )
+    return { data: result }
   }
 }

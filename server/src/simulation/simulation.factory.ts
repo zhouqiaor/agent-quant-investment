@@ -26,6 +26,8 @@ export interface SimulationConfig {
   watchlist?: string[]
   /** 月度迭代用：资金档位权重 (small/medium/large) */
   capitalTierWeights?: Record<string, number>
+  /** 多 seed 对比用：固定随机种子使运行可复现 */
+  seed?: number
 }
 
 export interface SimAccountTemplate {
@@ -63,6 +65,18 @@ export class SimulationFactory {
 
   constructor(private readonly persistence: PersistenceService) {}
 
+  private rngState: number | null = null
+  private seedRng(seed: number) {
+    this.rngState = seed >>> 0
+  }
+  private rng(): number {
+    if (this.rngState === null) return Math.random()
+    let t = (this.rngState = (this.rngState + 0x6d2b79f5) >>> 0)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+
   async createBatch(
     runId: string,
     config: SimulationConfig = {},
@@ -70,6 +84,11 @@ export class SimulationFactory {
     const count = config.accountCount ?? 100
     const capitalMin = config.capitalMin ?? 10_000
     const capitalMax = config.capitalMax ?? 1_000_000
+    if (config.seed !== undefined) {
+      this.seedRng(config.seed)
+    } else {
+      this.rngState = null
+    }
     const industries = (config.industries && config.industries.length > 0
       ? INDUSTRIES.filter(i => config.industries!.includes(i.code as IndustryCode))
       : INDUSTRIES) as typeof INDUSTRIES
@@ -159,7 +178,7 @@ export class SimulationFactory {
     const copy = [...arr]
     const out: T[] = []
     for (let i = 0; i < n && copy.length > 0; i++) {
-      const idx = Math.floor(Math.random() * copy.length)
+      const idx = Math.floor(this.rng() * copy.length)
       out.push(copy.splice(idx, 1)[0])
     }
     return out

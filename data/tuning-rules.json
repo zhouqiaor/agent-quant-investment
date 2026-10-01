@@ -18,6 +18,22 @@
     "minWeight": 0.05,
     "maxWeight": 0.6
   },
+  "concentration": {
+    "perIndustryMax": 0.25,
+    "top3Max": 0.6
+  },
+  "metaTuner": {
+    "enabled": true,
+    "steps": 30,
+    "stepSize": 0.01,
+    "objective": "calmar",
+    "fallback": {
+      "winnerMinWinRate": 0.5,
+      "winnerMinMeanReturn": 0.0,
+      "loserMaxWinRate": 0.4,
+      "loserMaxMeanReturn": 0.0
+    }
+  },
   "watchlist": {
     "baseSize": 5,
     "carryTopN": 3,

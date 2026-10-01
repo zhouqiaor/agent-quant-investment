@@ -25,12 +25,15 @@ interface AccountRow {
   totalReturn: number
 }
 
-interface RunSummary {
+export interface RunSummary {
   runId: string
   month: string
   accountCount: number
   aggregateReturn: number
   winRate: number
+  sharpe: number
+  maxDrawdown: number
+  calmar: number
   industryStats: IndustryStat[]
   strategyStats: StrategyStat[]
 }
@@ -48,6 +51,50 @@ export class YearReportService {
 
   constructor(private readonly persistence: PersistenceService) {}
 
+  private computeRiskMetrics(seriesByAccount: Map<string, { ts: number; rate: number }[]>): {
+    sharpe: number
+    maxDD: number
+    calmar: number
+  } {
+    const all: { ts: number; rate: number }[] = []
+    for (const arr of seriesByAccount.values()) {
+      const sorted = [...arr].sort((a, b) => a.ts - b.ts)
+      for (let i = 0; i < sorted.length; i++) all.push(sorted[i])
+    }
+    if (!all.length) return { sharpe: 0, maxDD: 0, calmar: 0 }
+    const byTs = new Map<number, { rates: number[] }>()
+    for (const s of all) {
+      const e = byTs.get(s.ts) ?? { rates: [] }
+      e.rates.push(s.rate)
+      byTs.set(s.ts, e)
+    }
+    const sortedTs = Array.from(byTs.keys()).sort((a, b) => a - b)
+    const avgReturns = sortedTs.map((ts) => {
+      const arr = byTs.get(ts)!.rates
+      return arr.reduce((s, r) => s + r, 0) / arr.length
+    })
+    const meanR = avgReturns.reduce((s, r) => s + r, 0) / avgReturns.length
+    const variance = avgReturns.reduce((s, r) => s + (r - meanR) ** 2, 0) / avgReturns.length
+    const std = Math.sqrt(variance)
+    const sharpe = std > 1e-9 ? (meanR / std) * Math.sqrt(252) : 0
+    let peak = 0
+    let equity = 0
+    let maxDD = 0
+    for (const r of avgReturns) {
+      equity = (1 + equity) * (1 + r) - 1
+      if (equity > peak) peak = equity
+      const dd = peak > 0 ? (equity - peak) / (1 + peak) : 0
+      if (dd < maxDD) maxDD = dd
+    }
+    const annualReturn = meanR * 252
+    const calmar = maxDD < -1e-9 ? annualReturn / Math.abs(maxDD) : 0
+    return {
+      sharpe: Math.round(sharpe * 100) / 100,
+      maxDD: Math.round(maxDD * 10000) / 100,
+      calmar: Math.round(calmar * 100) / 100,
+    }
+  }
+
   async aggregate(): Promise<RunSummary[]> {
     const runs = this.persistence.listSimulationRuns().filter((r) => /2026-/.test(r.name ?? ''))
     const out: RunSummary[] = []
@@ -55,12 +102,16 @@ export class YearReportService {
       const accounts: any[] = this.persistence.listSimAccounts(run.id)
       if (!accounts.length) continue
       const snaps = this.persistence['db'].prepare(
-        `SELECT account_id, total_pnl, total_pnl_rate FROM sim_snapshots
+        `SELECT account_id, ts, total_pnl, total_pnl_rate FROM sim_snapshots
          WHERE run_id = ? ORDER BY ts DESC`,
       ).all(run.id) as any[]
       const latestSnap = new Map<string, { total_pnl: number; total_pnl_rate: number }>()
+      const seriesByAccount = new Map<string, { ts: number; rate: number }[]>()
       for (const s of snaps) {
         if (!latestSnap.has(s.account_id)) latestSnap.set(s.account_id, { total_pnl: s.total_pnl ?? 0, total_pnl_rate: s.total_pnl_rate ?? 0 })
+        const arr = seriesByAccount.get(s.account_id) ?? []
+        arr.push({ ts: s.ts, rate: s.total_pnl_rate ?? 0 })
+        seriesByAccount.set(s.account_id, arr)
       }
       const enriched: AccountRow[] = accounts.map((a: any) => {
         const snap = latestSnap.get(a.id)
@@ -87,12 +138,16 @@ export class YearReportService {
         strategies.set(a.strategy, ss)
       }
       const round = (v: number) => Math.round(v * 10000) / 10000
+      const risk = this.computeRiskMetrics(seriesByAccount)
       out.push({
         runId: run.id,
         month: (run as any).config?.month ?? '',
         accountCount: enriched.length,
         aggregateReturn: round(totalReturn),
         winRate: round(winners / enriched.length),
+        sharpe: risk.sharpe,
+        maxDrawdown: risk.maxDD,
+        calmar: risk.calmar,
         industryStats: Array.from(industries.entries())
           .map(([industry, status]) => ({
             industry,
@@ -128,10 +183,10 @@ export class YearReportService {
 
     lines.push('## §1 月度表现总览')
     lines.push('')
-    lines.push('| 月份 | 账户数 | 累计收益 | 胜率 |')
-    lines.push('|------|--------|----------|------|')
+    lines.push('| 月份 | 账户数 | 累计收益 | 胜率 | Sharpe | MaxDD | Calmar |')
+    lines.push('|------|--------|----------|------|--------|-------|--------|')
     for (const r of runs) {
-      lines.push(`| ${r.month} | ${r.accountCount} | ${(r.aggregateReturn * 100).toFixed(2)}% | ${(r.winRate * 100).toFixed(2)}% |`)
+      lines.push(`| ${r.month} | ${r.accountCount} | ${(r.aggregateReturn * 100).toFixed(2)}% | ${(r.winRate * 100).toFixed(2)}% | ${r.sharpe.toFixed(2)} | ${(r.maxDrawdown * 100).toFixed(2)}% | ${r.calmar.toFixed(2)} |`)
     }
     lines.push('')
 

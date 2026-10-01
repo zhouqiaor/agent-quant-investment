@@ -7,11 +7,12 @@ import { SimulationController } from './simulation.controller'
 import { MarkdownReportRenderer } from './markdown-report.service'
 import { StrategyTunerService } from './strategy-tuner.service'
 import { YearReportService } from './year-report.service'
+import { MetaTunerService } from './meta-tuner.service'
 
 @Module({
   imports: [PersistenceModule],
-  providers: [SimulationFactory, SimulationScheduler, SimulationReportService, MarkdownReportRenderer, StrategyTunerService, YearReportService],
+  providers: [SimulationFactory, SimulationScheduler, SimulationReportService, MarkdownReportRenderer, StrategyTunerService, YearReportService, MetaTunerService],
   controllers: [SimulationController],
-  exports: [SimulationScheduler, SimulationReportService, MarkdownReportRenderer, StrategyTunerService, YearReportService],
+  exports: [SimulationScheduler, SimulationReportService, MarkdownReportRenderer, StrategyTunerService, YearReportService, MetaTunerService],
 })
 export class SimulationModule {}

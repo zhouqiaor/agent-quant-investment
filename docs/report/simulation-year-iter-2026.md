@@ -84,3 +84,60 @@
 - 总账户数：**1300**
 - 累计加权收益：**162.52%**
 - 平均月胜率：**29.67%**
+
+## §7 实时盯盘模式（P2 新增）
+
+> 把仿真从「历史回放」延伸到「实时盯盘」：策略不再只跑历史 K 线，而是接 mock 实时价格流 → 按 tick 触发信号 → 模拟撮合 → 持仓/订单/P&L 实时更新。
+
+### 后端架构
+
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| MockFeedService | `server/src/simulation/mock-feed.service.ts` | 从 `data/year-kline.json` 加载指定月份 K 线，按 `tickMs` 间隔推送 TickEvent |
+| LiveStrategyAdapter | `server/src/simulation/live-strategy-adapter.ts` | 复用 P0+P1 的 5 个策略，新增 onTick 适配层（滚动 30 根窗口） |
+| MockMatchEngine | `server/src/simulation/mock-match-engine.ts` | 市价单撮合，0.1% 手续费，记录 realizedPnl |
+| LivePortfolio | `server/src/simulation/live-portfolio.ts` | 现金/持仓/已实现 P&L/未实现 P&L/权益曲线账本 |
+| LiveSimulationEngine | `server/src/simulation/live-simulation.engine.ts` | 编排 MockFeed → Adapter → MatchEngine → Portfolio |
+| LiveController | `server/src/simulation/live-simulation.controller.ts` | 5 个 REST 路由：`/start /pause /resume /stop /state` |
+
+### REST 路由
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/live/start` | 启动：`{month, strategy, tickMs?, initialCash?}` → `{runId, totalTicks, monthName}` |
+| `POST` | `/api/live/:runId/pause` | 暂停（仅 running → paused） |
+| `POST` | `/api/live/:runId/resume` | 恢复（paused → running） |
+| `POST` | `/api/live/:runId/stop` | 停止并清理 |
+| `GET`  | `/api/live/:runId/state` | 拉一次完整快照（前端 2 秒轮询） |
+| `GET`  | `/api/live/runs` | 列出所有活跃 run |
+
+### 验证（dev 环境）
+
+```bash
+# 启动（每月 16 支股票 × 22 交易日 = 352 tick）
+curl -s -X POST http://localhost:3000/api/live/start \
+  -H "Content-Type: application/json" \
+  -d '{"month":"2026-09","strategy":"ma_cross","tickMs":100,"initialCash":1000000}'
+# → {"code":200,"msg":"ok","data":{"runId":"live-...","totalTicks":352,"monthName":"金九银十"}}
+
+# 2 秒后拉快照（cash 已扣、position 已建、recentOrders > 0）
+curl -s http://localhost:3000/api/live/live-.../state | python3 -m json.tool
+```
+
+实测 2026-09 + ma_cross + tickMs=100，跑 4 秒已处理 154 tick、建仓 9 个、47 笔订单、totalPnl=+1249.7。
+
+### 前端 Live Tab
+
+仿真页新增第 5 个 Tab「实时」（`src/pages/simulation/index.tsx` 中 `LivePanel` 组件）：
+- 控制栏：月份 / 策略 / tick 间隔 / 启动-暂停-恢复-停止
+- P&L 卡片：累计 P&L、当前权益、已实现/未实现、订单/持仓计数
+- 持仓列表：symbol / 数量 / 成本 / 现价 / 浮动盈亏（mark-to-market）
+- 订单流：最近 50 笔订单滚动列表（BUY 绿 / SELL 红 / 利润列）
+- 跨端兼容：`Taro.getEnv()` 区分小程序与 H5，分别用 `Taro.setInterval` 与 `setInterval`，组件卸载时统一清理
+
+### 设计取舍
+
+- **不持久化**：Live 是过程性数据（重启即清空），与回测的 SQLite 持久化区分
+- **短轮询而非 WebSocket**：移动端友好，2 秒间隔足够演示；后续可升级 SSE
+- **市价单优先**：满足实时演示；限价单、止损单等后续扩展
+- **不引入新表**：live run 元信息以 `runId` 内存态持有，重启丢失

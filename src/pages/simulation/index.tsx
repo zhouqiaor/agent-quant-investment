@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, Text } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { Network } from '@/network'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { RefreshCw, ChartBar, Activity } from 'lucide-react-taro'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Play, Pause, Square, RefreshCw, ChartBar, Activity, TrendingUp, TrendingDown, Wallet, Layers, ListOrdered } from 'lucide-react-taro'
 
 interface RunSummary {
   runId: string
@@ -135,6 +138,412 @@ function HeatGrid({ runs, dim }: { runs: RunSummary[]; dim: 'industryStats' | 's
   )
 }
 
+/* ====================================================================== */
+/* Live 实时盯盘面板                                                       */
+/* ====================================================================== */
+
+const STRATEGY_OPTIONS = [
+  { value: 'ma_cross', label: '均线交叉' },
+  { value: 'momentum', label: '动量' },
+  { value: 'reversal', label: '反转' },
+  { value: 'breakout', label: '突破' },
+  { value: 'trend_follow', label: '趋势跟随' },
+]
+
+const MONTH_OPTIONS = [
+  { value: '2026-01', label: '2026-01 年初杀跌' },
+  { value: '2026-02', label: '2026-02 春节反弹' },
+  { value: '2026-03', label: '2026-03 两会行情' },
+  { value: '2026-04', label: '2026-04 财报季' },
+  { value: '2026-05', label: '2026-05 红五月' },
+  { value: '2026-06', label: '2026-06 震荡市' },
+  { value: '2026-07', label: '2026-07 中报预热' },
+  { value: '2026-08', label: '2026-08 政策预期' },
+  { value: '2026-09', label: '2026-09 金九银十' },
+  { value: '2026-10', label: '2026-10 调整月' },
+  { value: '2026-11', label: '2026-11 估值修复' },
+  { value: '2026-12', label: '2026-12 跨年布局' },
+]
+
+interface LivePosition {
+  symbol: string
+  qty: number
+  avgCost: number
+  currentPrice: number
+  marketValue: number
+  unrealizedPnl: number
+  unrealizedPnlPct: number
+}
+
+interface LiveOrder {
+  id: string
+  side: 'BUY' | 'SELL'
+  symbol: string
+  quantity: number
+  price: number
+  amount: number
+  fee: number
+  realizedPnl: number | null
+  reason: string
+  ts: number
+}
+
+interface LiveState {
+  runId: string
+  status: 'idle' | 'running' | 'paused' | 'finished' | 'errored'
+  month: string
+  strategy: string
+  initialCash: number
+  startedAt: number
+  currentTick: number
+  totalTicks: number
+  feedStatus: string | null
+  portfolio: {
+    cash: number
+    initialCash: number
+    positions: LivePosition[]
+    realizedPnl: number
+    unrealizedPnl: number
+    totalPnl: number
+    totalPnlPct: number
+    equity: number
+    equityCurve: { ts: number; equity: number }[]
+  }
+  recentOrders: LiveOrder[]
+  lastError: string | null
+}
+
+function fmtMoney(v: number) {
+  return v.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+}
+
+function fmtPrice(v: number) {
+  return v.toFixed(2)
+}
+
+function pnlColor(v: number) {
+  if (v > 0.01) return 'text-emerald-500'
+  if (v < -0.01) return 'text-rose-500'
+  return 'text-slate-500'
+}
+
+function LivePanel() {
+  const [month, setMonth] = useState('2026-03')
+  const [strategy, setStrategy] = useState('ma_cross')
+  const [tickMs, setTickMs] = useState('500')
+  const [runId, setRunId] = useState<string | null>(null)
+  const [state, setState] = useState<LiveState | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  const startPolling = (id: string) => {
+    stopPolling()
+    const isMiniapp = ([Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT] as string[]).includes(Taro.getEnv() as string)
+    const handle = isMiniapp ? (Taro as any).setInterval : setInterval
+    pollRef.current = handle(async () => {
+      try {
+        const res: any = await Network.request({ url: `/api/live/${id}/state` })
+        const data = res?.data?.data
+        if (data) {
+          setState(data as LiveState)
+          if (data.status === 'finished' || data.status === 'errored') stopPolling()
+        }
+      } catch (e) {
+        // 网络抖动不打断轮询
+      }
+    }, 2000)
+  }
+
+  useEffect(() => {
+    return () => stopPolling()
+  }, [])
+
+  const handleStart = async () => {
+    setError(null)
+    setStarting(true)
+    try {
+      const res: any = await Network.request({
+        url: '/api/live/start',
+        method: 'POST',
+        data: { month, strategy, tickMs: Number(tickMs), initialCash: 1_000_000 },
+      })
+      const data = res?.data?.data
+      if (res?.data?.code === 200 && data?.runId) {
+        setRunId(data.runId)
+        startPolling(data.runId)
+      } else {
+        setError(res?.data?.msg ?? '启动失败')
+      }
+    } catch (e: any) {
+      setError(e?.message ?? '网络错误')
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const handlePause = async () => {
+    if (!runId) return
+    await Network.request({ url: `/api/live/${runId}/pause`, method: 'POST' })
+  }
+
+  const handleResume = async () => {
+    if (!runId) return
+    await Network.request({ url: `/api/live/${runId}/resume`, method: 'POST' })
+  }
+
+  const handleStop = async () => {
+    if (!runId) return
+    await Network.request({ url: `/api/live/${runId}/stop`, method: 'POST' })
+    stopPolling()
+    setRunId(null)
+    setState(null)
+  }
+
+  const isRunning = state?.status === 'running'
+  const isPaused = state?.status === 'paused'
+  const isFinished = state?.status === 'finished' || state?.status === 'errored'
+
+  return (
+    <View className="space-y-3">
+      {/* 控制栏 */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <View className="flex items-center gap-2">
+            <Text className="block text-sm font-medium">实时仿真控制台</Text>
+            <Text className="text-xs text-muted-foreground ml-auto">2 秒轮询</Text>
+          </View>
+
+          <View className="grid grid-cols-2 gap-2">
+            <View>
+              <Text className="block text-xs text-muted-foreground mb-1">月份</Text>
+              <Select value={month} onValueChange={setMonth}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择月份" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </View>
+            <View>
+              <Text className="block text-xs text-muted-foreground mb-1">策略</Text>
+              <Select value={strategy} onValueChange={setStrategy}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择策略" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STRATEGY_OPTIONS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </View>
+          </View>
+
+          <View className="grid grid-cols-2 gap-2">
+            <View>
+              <Text className="block text-xs text-muted-foreground mb-1">Tick 间隔 (ms)</Text>
+              <Select value={tickMs} onValueChange={setTickMs}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="tickMs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="200">200ms（演示）</SelectItem>
+                  <SelectItem value="500">500ms</SelectItem>
+                  <SelectItem value="1000">1000ms</SelectItem>
+                  <SelectItem value="2000">2000ms</SelectItem>
+                </SelectContent>
+              </Select>
+            </View>
+            <View>
+              <Text className="block text-xs text-muted-foreground mb-1">状态</Text>
+              <View className="h-10 flex items-center px-3 rounded-md border bg-slate-50">
+                <Text className="text-sm font-mono">
+                  {state?.status ?? '未启动'}
+                  {state?.currentTick != null && state?.totalTicks != null
+                    ? `  ${state.currentTick}/${state.totalTicks}`
+                    : ''}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View className="flex gap-2">
+            {!runId || isFinished ? (
+              <Button className="flex-1" onClick={handleStart} disabled={starting}>
+                <Play size={14} color="white" />
+                <Text className="ml-1 text-white">{starting ? '启动中…' : '启动'}</Text>
+              </Button>
+            ) : (
+              <>
+                {isRunning ? (
+                  <Button className="flex-1" variant="outline" onClick={handlePause}>
+                    <Pause size={14} color="#64748b" />
+                    <Text className="ml-1">暂停</Text>
+                  </Button>
+                ) : isPaused ? (
+                  <Button className="flex-1" onClick={handleResume}>
+                    <Play size={14} color="white" />
+                    <Text className="ml-1 text-white">恢复</Text>
+                  </Button>
+                ) : null}
+                <Button className="flex-1" variant="destructive" onClick={handleStop}>
+                  <Square size={14} color="white" />
+                  <Text className="ml-1 text-white">停止</Text>
+                </Button>
+              </>
+            )}
+          </View>
+
+          {error && (
+            <View className="bg-rose-50 border border-rose-200 rounded p-2">
+              <Text className="text-xs text-rose-600">⚠ {error}</Text>
+            </View>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* P&L 卡片 */}
+      {state ? (
+        <View className="grid grid-cols-2 gap-3">
+          <Card>
+            <CardContent className="p-3">
+              <View className="flex items-center justify-between">
+                <Text className="text-xs text-muted-foreground">累计 P&L</Text>
+                {state.portfolio.totalPnl >= 0 ? (
+                  <TrendingUp size={14} color="#10b981" />
+                ) : (
+                  <TrendingDown size={14} color="#f43f5e" />
+                )}
+              </View>
+              <Text className={`block text-xl font-semibold mt-1 ${pnlColor(state.portfolio.totalPnl)}`}>
+                {state.portfolio.totalPnl >= 0 ? '+' : ''}{fmtMoney(state.portfolio.totalPnl)}
+              </Text>
+              <Text className={`block text-xs mt-1 ${pnlColor(state.portfolio.totalPnlPct / 100)}`}>
+                {state.portfolio.totalPnlPct >= 0 ? '+' : ''}{state.portfolio.totalPnlPct.toFixed(2)}%
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <View className="flex items-center justify-between">
+                <Text className="text-xs text-muted-foreground">当前权益</Text>
+                <Wallet size={14} color="#64748b" />
+              </View>
+              <Text className="block text-xl font-semibold mt-1 font-mono">
+                {fmtMoney(state.portfolio.equity)}
+              </Text>
+              <Text className="block text-xs text-muted-foreground mt-1">
+                现金 {fmtMoney(state.portfolio.cash)}
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <Text className="text-xs text-muted-foreground">已实现 / 未实现</Text>
+              <Text className={`block text-sm font-medium mt-1 ${pnlColor(state.portfolio.realizedPnl)}`}>
+                R: {state.portfolio.realizedPnl >= 0 ? '+' : ''}{fmtMoney(state.portfolio.realizedPnl)}
+              </Text>
+              <Text className={`block text-sm font-medium ${pnlColor(state.portfolio.unrealizedPnl)}`}>
+                U: {state.portfolio.unrealizedPnl >= 0 ? '+' : ''}{fmtMoney(state.portfolio.unrealizedPnl)}
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <Text className="text-xs text-muted-foreground">订单 / 持仓</Text>
+              <Text className="block text-xl font-semibold mt-1">
+                {state.recentOrders.length} / {state.portfolio.positions.length}
+              </Text>
+              <Text className="block text-xs text-muted-foreground mt-1">最近订单 / 当前持仓</Text>
+            </CardContent>
+          </Card>
+        </View>
+      ) : (
+        <Card>
+          <CardContent className="p-6">
+            <Text className="block text-center text-sm text-muted-foreground">
+              点击启动按钮开始一次实时仿真
+            </Text>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 持仓列表 */}
+      {state && state.portfolio.positions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <View className="flex items-center gap-2">
+              <Layers size={14} color="#64748b" />
+              <CardTitle>当前持仓（{state.portfolio.positions.length}）</CardTitle>
+            </View>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ScrollArea className="h-[200px]">
+              <View className="space-y-1">
+                {state.portfolio.positions.map((p) => (
+                  <View key={p.symbol} className="grid grid-cols-12 items-center gap-1 py-2 border-b border-slate-100 last:border-b-0">
+                    <Text className="col-span-3 text-sm font-medium">{p.symbol}</Text>
+                    <Text className="col-span-2 text-xs text-right text-muted-foreground">{p.qty}股</Text>
+                    <Text className="col-span-2 text-xs text-right font-mono">{fmtPrice(p.avgCost)}</Text>
+                    <Text className="col-span-2 text-xs text-right font-mono">{fmtPrice(p.currentPrice)}</Text>
+                    <Text className={`col-span-3 text-xs text-right font-mono ${pnlColor(p.unrealizedPnl)}`}>
+                      {p.unrealizedPnl >= 0 ? '+' : ''}{fmtMoney(p.unrealizedPnl)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 订单流 */}
+      {state && state.recentOrders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <View className="flex items-center gap-2">
+              <ListOrdered size={14} color="#64748b" />
+              <CardTitle>最近订单（最新 {state.recentOrders.length} 笔）</CardTitle>
+            </View>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ScrollArea className="h-[240px]">
+              <View className="space-y-1">
+                {state.recentOrders.map((o) => (
+                  <View key={o.id} className="grid grid-cols-12 items-center gap-1 py-2 border-b border-slate-100 last:border-b-0">
+                    <View className="col-span-2">
+                      <Text className={`text-xs font-medium ${o.side === 'BUY' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {o.side === 'BUY' ? '买' : '卖'}
+                      </Text>
+                    </View>
+                    <Text className="col-span-3 text-sm">{o.symbol}</Text>
+                    <Text className="col-span-2 text-xs text-right text-muted-foreground">{o.quantity}股</Text>
+                    <Text className="col-span-2 text-xs text-right font-mono">{fmtPrice(o.price)}</Text>
+                    <Text className={`col-span-3 text-right text-xs ${o.realizedPnl != null ? pnlColor(o.realizedPnl) : 'text-slate-500'}`}>
+                      {o.realizedPnl != null ? `${o.realizedPnl >= 0 ? '+' : ''}${fmtMoney(o.realizedPnl)}` : '—'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </View>
+  )
+}
+
 export default function SimulationPage() {
   const [report, setReport] = useState<YearReport | null>(null)
   const [loading, setLoading] = useState(false)
@@ -220,11 +629,12 @@ export default function SimulationPage() {
         </View>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
             <TabsTrigger value="overview">总览</TabsTrigger>
             <TabsTrigger value="monthly">月度</TabsTrigger>
             <TabsTrigger value="heat">热力</TabsTrigger>
             <TabsTrigger value="trajectory">轨迹</TabsTrigger>
+            <TabsTrigger value="live">实时</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-3 space-y-3">
@@ -295,6 +705,9 @@ export default function SimulationPage() {
                 </ScrollArea>
               </CardContent>
             </Card>
+          </TabsContent>
+          <TabsContent value="live" className="mt-3 space-y-3">
+            <LivePanel />
           </TabsContent>
         </Tabs>
       </View>

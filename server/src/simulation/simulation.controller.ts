@@ -40,6 +40,7 @@ export class SimulationController {
     strategyWeights?: Record<string, number>
     watchlist?: string[]
     capitalTierWeights?: Record<string, number>
+    seed?: number
   }) {
     if (!body.month || !/^\d{4}-\d{2}$/.test(body.month)) {
       return { code: 400, msg: 'month 必须为 YYYY-MM 格式', data: null }

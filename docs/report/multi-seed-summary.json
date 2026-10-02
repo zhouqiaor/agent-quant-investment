@@ -1,0 +1,548 @@
+{
+  "timestamp": "2026-10-01T13:55:54.606Z",
+  "seeds": 5,
+  "accountCount": 30,
+  "totalRuns": 55,
+  "totalAggregateReturn": 2.408,
+  "avgWinRate": 0.2867,
+  "byMonth": {
+    "2026-01": {
+      "n": 5,
+      "mean": -0.1669,
+      "std": 0.035,
+      "winRate": 0.0267,
+      "ci95Low": -0.1976,
+      "ci95High": -0.1363
+    },
+    "2026-02": {
+      "n": 5,
+      "mean": 0.0609,
+      "std": 0.0134,
+      "winRate": 0.3933,
+      "ci95Low": 0.0491,
+      "ci95High": 0.0726
+    },
+    "2026-03": {
+      "n": 5,
+      "mean": 0.3043,
+      "std": 0.1427,
+      "winRate": 0.5533,
+      "ci95Low": 0.1792,
+      "ci95High": 0.4294
+    },
+    "2026-04": {
+      "n": 5,
+      "mean": 0.0748,
+      "std": 0.0363,
+      "winRate": 0.32,
+      "ci95Low": 0.043,
+      "ci95High": 0.1065
+    },
+    "2026-05": {
+      "n": 5,
+      "mean": 0.1572,
+      "std": 0.0508,
+      "winRate": 0.4333,
+      "ci95Low": 0.1127,
+      "ci95High": 0.2017
+    },
+    "2026-06": {
+      "n": 5,
+      "mean": -0.0139,
+      "std": 0.0097,
+      "winRate": 0.0267,
+      "ci95Low": -0.0224,
+      "ci95High": -0.0055
+    },
+    "2026-07": {
+      "n": 5,
+      "mean": 0.0371,
+      "std": 0.0104,
+      "winRate": 0.3667,
+      "ci95Low": 0.0279,
+      "ci95High": 0.0462
+    },
+    "2026-08": {
+      "n": 4,
+      "mean": 0.0572,
+      "std": 0.0142,
+      "winRate": 0.4083,
+      "ci95Low": 0.0433,
+      "ci95High": 0.0711
+    },
+    "2026-09": {
+      "n": 4,
+      "mean": 0.0076,
+      "std": 0.0323,
+      "winRate": 0.4,
+      "ci95Low": -0.024,
+      "ci95High": 0.0392
+    },
+    "2026-10": {
+      "n": 4,
+      "mean": -0.034,
+      "std": 0.0156,
+      "winRate": 0.025,
+      "ci95Low": -0.0493,
+      "ci95High": -0.0187
+    },
+    "2026-11": {
+      "n": 4,
+      "mean": 0.0831,
+      "std": 0.0388,
+      "winRate": 0.4584,
+      "ci95Low": 0.0451,
+      "ci95High": 0.1211
+    },
+    "2026-12": {
+      "n": 4,
+      "mean": -0.0786,
+      "std": 0.0397,
+      "winRate": 0,
+      "ci95Low": -0.1175,
+      "ci95High": -0.0397
+    }
+  },
+  "runs": [
+    {
+      "runId": "sim_mupkl9b6",
+      "seed": null,
+      "month": "2026-01",
+      "accountCount": 30,
+      "aggregateReturn": -0.1834,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupkllro",
+      "seed": null,
+      "month": "2026-02",
+      "accountCount": 30,
+      "aggregateReturn": 0.0404,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupklv2y",
+      "seed": null,
+      "month": "2026-03",
+      "accountCount": 30,
+      "aggregateReturn": 0.5436,
+      "winRate": 0.6667
+    },
+    {
+      "runId": "sim_mupkm92n",
+      "seed": null,
+      "month": "2026-04",
+      "accountCount": 30,
+      "aggregateReturn": 0.0593,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupkmn1q",
+      "seed": null,
+      "month": "2026-05",
+      "accountCount": 30,
+      "aggregateReturn": 0.113,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupkmzh2",
+      "seed": null,
+      "month": "2026-06",
+      "accountCount": 30,
+      "aggregateReturn": -0.0258,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupkndfp",
+      "seed": null,
+      "month": "2026-07",
+      "accountCount": 30,
+      "aggregateReturn": 0.0473,
+      "winRate": 0.4
+    },
+    {
+      "runId": "sim_mupknrf1",
+      "seed": null,
+      "month": "2026-08",
+      "accountCount": 30,
+      "aggregateReturn": 0.0447,
+      "winRate": 0.4
+    },
+    {
+      "runId": "sim_mupko3vt",
+      "seed": null,
+      "month": "2026-09",
+      "accountCount": 30,
+      "aggregateReturn": 0.0078,
+      "winRate": 0.5333
+    },
+    {
+      "runId": "sim_mupkojhg",
+      "seed": null,
+      "month": "2026-10",
+      "accountCount": 30,
+      "aggregateReturn": -0.0232,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupkovy3",
+      "seed": null,
+      "month": "2026-11",
+      "accountCount": 30,
+      "aggregateReturn": 0.1456,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupkp8gh",
+      "seed": null,
+      "month": "2026-12",
+      "accountCount": 30,
+      "aggregateReturn": -0.0973,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupkpmg5",
+      "seed": null,
+      "month": "2026-01",
+      "accountCount": 30,
+      "aggregateReturn": -0.1802,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupkpyuu",
+      "seed": null,
+      "month": "2026-02",
+      "accountCount": 30,
+      "aggregateReturn": 0.0796,
+      "winRate": 0.4
+    },
+    {
+      "runId": "sim_mupkq88n",
+      "seed": null,
+      "month": "2026-03",
+      "accountCount": 30,
+      "aggregateReturn": 0.1277,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupkqma1",
+      "seed": null,
+      "month": "2026-04",
+      "accountCount": 30,
+      "aggregateReturn": 0.0753,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupkr09d",
+      "seed": null,
+      "month": "2026-05",
+      "accountCount": 30,
+      "aggregateReturn": 0.1034,
+      "winRate": 0.4333
+    },
+    {
+      "runId": "sim_mupkrcoj",
+      "seed": null,
+      "month": "2026-06",
+      "accountCount": 30,
+      "aggregateReturn": -0.0033,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupkrqmx",
+      "seed": null,
+      "month": "2026-07",
+      "accountCount": 30,
+      "aggregateReturn": 0.0439,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupks61s",
+      "seed": null,
+      "month": "2026-08",
+      "accountCount": 30,
+      "aggregateReturn": 0.0416,
+      "winRate": 0.4333
+    },
+    {
+      "runId": "sim_mupksigd",
+      "seed": null,
+      "month": "2026-09",
+      "accountCount": 30,
+      "aggregateReturn": 0.0602,
+      "winRate": 0.3333
+    },
+    {
+      "runId": "sim_mupksxxy",
+      "seed": null,
+      "month": "2026-10",
+      "accountCount": 30,
+      "aggregateReturn": -0.0583,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupktac7",
+      "seed": null,
+      "month": "2026-11",
+      "accountCount": 30,
+      "aggregateReturn": 0.0453,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupktmql",
+      "seed": null,
+      "month": "2026-12",
+      "accountCount": 30,
+      "aggregateReturn": -0.1321,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupku0ok",
+      "seed": null,
+      "month": "2026-01",
+      "accountCount": 30,
+      "aggregateReturn": -0.0984,
+      "winRate": 0.0667
+    },
+    {
+      "runId": "sim_mupkud2w",
+      "seed": null,
+      "month": "2026-02",
+      "accountCount": 30,
+      "aggregateReturn": 0.0609,
+      "winRate": 0.4333
+    },
+    {
+      "runId": "sim_mupkumdx",
+      "seed": null,
+      "month": "2026-03",
+      "accountCount": 30,
+      "aggregateReturn": 0.3555,
+      "winRate": 0.5333
+    },
+    {
+      "runId": "sim_mupkv0bw",
+      "seed": null,
+      "month": "2026-04",
+      "accountCount": 30,
+      "aggregateReturn": 0.0152,
+      "winRate": 0.2333
+    },
+    {
+      "runId": "sim_mupkve9s",
+      "seed": null,
+      "month": "2026-05",
+      "accountCount": 30,
+      "aggregateReturn": 0.2464,
+      "winRate": 0.5
+    },
+    {
+      "runId": "sim_mupkvqo1",
+      "seed": null,
+      "month": "2026-06",
+      "accountCount": 30,
+      "aggregateReturn": -0.0252,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupkw4lx",
+      "seed": null,
+      "month": "2026-07",
+      "accountCount": 30,
+      "aggregateReturn": 0.0373,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupkwik0",
+      "seed": null,
+      "month": "2026-08",
+      "accountCount": 30,
+      "aggregateReturn": 0.0692,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupkwuyc",
+      "seed": null,
+      "month": "2026-09",
+      "accountCount": 30,
+      "aggregateReturn": -0.019,
+      "winRate": 0.3
+    },
+    {
+      "runId": "sim_mupkxafz",
+      "seed": null,
+      "month": "2026-10",
+      "accountCount": 30,
+      "aggregateReturn": -0.0366,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupkxmu4",
+      "seed": null,
+      "month": "2026-11",
+      "accountCount": 30,
+      "aggregateReturn": 0.0844,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupkxz8l",
+      "seed": null,
+      "month": "2026-12",
+      "accountCount": 30,
+      "aggregateReturn": -0.0578,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupkyd6m",
+      "seed": null,
+      "month": "2026-01",
+      "accountCount": 30,
+      "aggregateReturn": -0.1757,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupkypky",
+      "seed": null,
+      "month": "2026-02",
+      "accountCount": 30,
+      "aggregateReturn": 0.0538,
+      "winRate": 0.3
+    },
+    {
+      "runId": "sim_mupkyyw3",
+      "seed": null,
+      "month": "2026-03",
+      "accountCount": 30,
+      "aggregateReturn": 0.2015,
+      "winRate": 0.4667
+    },
+    {
+      "runId": "sim_mupkzctx",
+      "seed": null,
+      "month": "2026-04",
+      "accountCount": 30,
+      "aggregateReturn": 0.1096,
+      "winRate": 0.2667
+    },
+    {
+      "runId": "sim_mupkzqrt",
+      "seed": null,
+      "month": "2026-05",
+      "accountCount": 30,
+      "aggregateReturn": 0.1574,
+      "winRate": 0.5
+    },
+    {
+      "runId": "sim_mupl0365",
+      "seed": null,
+      "month": "2026-06",
+      "accountCount": 30,
+      "aggregateReturn": -0.0057,
+      "winRate": 0.0667
+    },
+    {
+      "runId": "sim_mupl0h3z",
+      "seed": null,
+      "month": "2026-07",
+      "accountCount": 30,
+      "aggregateReturn": 0.0395,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupl0v1q",
+      "seed": null,
+      "month": "2026-08",
+      "accountCount": 30,
+      "aggregateReturn": 0.0734,
+      "winRate": 0.3333
+    },
+    {
+      "runId": "sim_mupl17fx",
+      "seed": null,
+      "month": "2026-09",
+      "accountCount": 30,
+      "aggregateReturn": -0.0186,
+      "winRate": 0.4333
+    },
+    {
+      "runId": "sim_mupl1mxp",
+      "seed": null,
+      "month": "2026-10",
+      "accountCount": 30,
+      "aggregateReturn": -0.0178,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupl1zc6",
+      "seed": null,
+      "month": "2026-11",
+      "accountCount": 30,
+      "aggregateReturn": 0.057,
+      "winRate": 0.4333
+    },
+    {
+      "runId": "sim_mupl2bqb",
+      "seed": null,
+      "month": "2026-12",
+      "accountCount": 30,
+      "aggregateReturn": -0.0271,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupl2po3",
+      "seed": null,
+      "month": "2026-01",
+      "accountCount": 30,
+      "aggregateReturn": -0.197,
+      "winRate": 0.0333
+    },
+    {
+      "runId": "sim_mupl322c",
+      "seed": null,
+      "month": "2026-02",
+      "accountCount": 30,
+      "aggregateReturn": 0.0696,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupl3bdl",
+      "seed": null,
+      "month": "2026-03",
+      "accountCount": 30,
+      "aggregateReturn": 0.2932,
+      "winRate": 0.6333
+    },
+    {
+      "runId": "sim_mupl3pbp",
+      "seed": null,
+      "month": "2026-04",
+      "accountCount": 30,
+      "aggregateReturn": 0.1144,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupl439t",
+      "seed": null,
+      "month": "2026-05",
+      "accountCount": 30,
+      "aggregateReturn": 0.1658,
+      "winRate": 0.3667
+    },
+    {
+      "runId": "sim_mupl4fo7",
+      "seed": null,
+      "month": "2026-06",
+      "accountCount": 30,
+      "aggregateReturn": -0.0097,
+      "winRate": 0
+    },
+    {
+      "runId": "sim_mupl4tm9",
+      "seed": null,
+      "month": "2026-07",
+      "accountCount": 30,
+      "aggregateReturn": 0.0174,
+      "winRate": 0.3333
+    }
+  ]
+}

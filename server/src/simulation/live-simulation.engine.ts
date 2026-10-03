@@ -4,6 +4,7 @@ import { LiveStrategyAdapter, type LiveSignal } from './live-strategy-adapter'
 import { MockMatchEngine, type OrderFill, type PortfolioState } from './mock-match-engine'
 import { LivePortfolio, type PortfolioSnapshot } from './live-portfolio'
 import type { StrategyCode } from './simulation.constants'
+import { computeRisk, equityToRates, type RiskMetrics } from './risk.util'
 
 export type LiveStatus = 'idle' | 'running' | 'paused' | 'finished' | 'errored'
 
@@ -41,6 +42,7 @@ export interface LiveStateView {
   portfolio: PortfolioSnapshot
   recentOrders: RecentOrderView[]
   currentPrices: Record<string, number>
+  risk: RiskMetrics
   lastError: string | null
 }
 
@@ -185,8 +187,22 @@ export class LiveSimulationEngine {
       portfolio: state.portfolio.snapshot(),
       recentOrders: [...state.recentOrders],
       currentPrices: { ...state.currentPrices },
+      risk: this.computeRiskFromEquity(state.portfolio.equityHistory()),
       lastError: state.lastError,
     }
+  }
+
+  /**
+   * 从权益曲线计算 Sharpe / Sortino / MaxDD / Calmar
+   * 对实时 tick 用 √(periods_per_year ≈ 252 * 390) ≈ 313.5
+   * 把每个 tick 当作 1 个 period，避免在跑不完前震荡 tick 看起来"波动巨大"
+   */
+  private computeRiskFromEquity(equityHistory: number[]): RiskMetrics {
+    if (equityHistory.length < 2) {
+      return { sharpe: 0, sortino: 0, maxDD: 0, calmar: 0 }
+    }
+    const rates = equityToRates(equityHistory)
+    return computeRisk(rates, Math.sqrt(252 * 390))
   }
 
   /**

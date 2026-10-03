@@ -10,6 +10,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Play, Pause, Square, RefreshCw, ChartBar, Activity, TrendingUp, TrendingDown, Wallet, Layers, ListOrdered } from 'lucide-react-taro'
+import { GlossaryTooltip } from '@/components/glossary-tooltip'
+import { StressPanel } from '@/components/stress-panel'
+import { StrategyPanel } from '@/components/strategy-panel'
 
 interface RunSummary {
   runId: string
@@ -78,11 +81,17 @@ function MonthTable({ runs }: { runs: RunSummary[] }) {
                 </Text>
                 <Text className="col-span-1 text-xs text-muted-foreground">胜率</Text>
                 <Text className="col-span-1 text-sm">{fmtPct(r.winRate)}</Text>
-                <Text className="col-span-1 text-xs text-muted-foreground">Sharpe</Text>
+                <GlossaryTooltip term="sharpe">
+                  <Text className="col-span-1 text-xs text-muted-foreground">Sharpe ⓘ</Text>
+                </GlossaryTooltip>
                 <Text className="col-span-1 text-sm">{r.sharpe.toFixed(2)}</Text>
-                <Text className="col-span-1 text-xs text-muted-foreground">MaxDD</Text>
+                <GlossaryTooltip term="maxdd">
+                  <Text className="col-span-1 text-xs text-muted-foreground">MaxDD ⓘ</Text>
+                </GlossaryTooltip>
                 <Text className="col-span-1 text-sm text-rose-500">{fmtPct(r.maxDrawdown)}</Text>
-                <Text className="col-span-1 text-xs text-muted-foreground">Calmar</Text>
+                <GlossaryTooltip term="calmar">
+                  <Text className="col-span-1 text-xs text-muted-foreground">Calmar ⓘ</Text>
+                </GlossaryTooltip>
                 <Text className="col-span-1 text-sm">{r.calmar.toFixed(2)}</Text>
               </View>
             ))}
@@ -143,11 +152,11 @@ function HeatGrid({ runs, dim }: { runs: RunSummary[]; dim: 'industryStats' | 's
 /* ====================================================================== */
 
 const STRATEGY_OPTIONS = [
-  { value: 'ma_cross', label: '均线交叉' },
-  { value: 'momentum', label: '动量' },
-  { value: 'reversal', label: '反转' },
-  { value: 'breakout', label: '突破' },
-  { value: 'trend_follow', label: '趋势跟随' },
+  { value: 'ma_cross', label: '均线交叉', glossaryKey: 'ma_cross' },
+  { value: 'momentum', label: '动量', glossaryKey: 'momentum' },
+  { value: 'reversal', label: '反转', glossaryKey: 'reversal' },
+  { value: 'breakout', label: '突破', glossaryKey: 'breakout' },
+  { value: 'trend_follow', label: '趋势跟随', glossaryKey: 'trend_follow' },
 ]
 
 const MONTH_OPTIONS = [
@@ -210,6 +219,8 @@ interface LiveState {
     equityCurve: { ts: number; equity: number }[]
   }
   recentOrders: LiveOrder[]
+  risk: { sharpe: number; sortino: number; maxDD: number; calmar: number }
+  currentPrices: Record<string, number>
   lastError: string | null
 }
 
@@ -224,6 +235,12 @@ function fmtPrice(v: number) {
 function pnlColor(v: number) {
   if (v > 0.01) return 'text-emerald-500'
   if (v < -0.01) return 'text-rose-500'
+  return 'text-slate-500'
+}
+
+function riskColor(v: number) {
+  if (v > 1) return 'text-emerald-500'
+  if (v < 0) return 'text-rose-500'
   return 'text-slate-500'
 }
 
@@ -347,6 +364,9 @@ function LivePanel() {
                   ))}
                 </SelectContent>
               </Select>
+              <GlossaryTooltip term={STRATEGY_OPTIONS.find((s) => s.value === strategy)?.glossaryKey ?? strategy}>
+                <Text className="block text-xs text-primary mt-1">ⓘ 当前策略说明</Text>
+              </GlossaryTooltip>
             </View>
           </View>
 
@@ -478,6 +498,52 @@ function LivePanel() {
           </CardContent>
         </Card>
       )}
+
+      {/* 风险透明面板：Sharpe / Sortino / MaxDD / Calmar（点击术语看解释） */}
+      {state ? (
+        <View className="grid grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="p-3">
+              <GlossaryTooltip term="sharpe">
+                <Text className="block text-xs text-muted-foreground">Sharpe ⓘ</Text>
+              </GlossaryTooltip>
+              <Text className={`block text-lg font-semibold mt-1 font-mono ${riskColor(state.risk.sharpe)}`}>
+                {state.risk.sharpe.toFixed(2)}
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <GlossaryTooltip term="sortino">
+                <Text className="block text-xs text-muted-foreground">Sortino ⓘ</Text>
+              </GlossaryTooltip>
+              <Text className={`block text-lg font-semibold mt-1 font-mono ${riskColor(state.risk.sortino)}`}>
+                {state.risk.sortino.toFixed(2)}
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <GlossaryTooltip term="maxdd">
+                <Text className="block text-xs text-muted-foreground">MaxDD ⓘ</Text>
+              </GlossaryTooltip>
+              <Text className="block text-lg font-semibold mt-1 font-mono text-rose-500">
+                {fmtPct(state.risk.maxDD / 100)}
+              </Text>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <GlossaryTooltip term="calmar">
+                <Text className="block text-xs text-muted-foreground">Calmar ⓘ</Text>
+              </GlossaryTooltip>
+              <Text className={`block text-lg font-semibold mt-1 font-mono ${riskColor(state.risk.calmar)}`}>
+                {state.risk.calmar.toFixed(2)}
+              </Text>
+            </CardContent>
+          </Card>
+        </View>
+      ) : null}
 
       {/* 持仓列表 */}
       {state && state.portfolio.positions.length > 0 && (
@@ -629,12 +695,14 @@ export default function SimulationPage() {
         </View>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-7 w-full">
             <TabsTrigger value="overview">总览</TabsTrigger>
             <TabsTrigger value="monthly">月度</TabsTrigger>
             <TabsTrigger value="heat">热力</TabsTrigger>
             <TabsTrigger value="trajectory">轨迹</TabsTrigger>
             <TabsTrigger value="live">实时</TabsTrigger>
+            <TabsTrigger value="stress">压力</TabsTrigger>
+            <TabsTrigger value="strategy">策略</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-3 space-y-3">
@@ -708,6 +776,12 @@ export default function SimulationPage() {
           </TabsContent>
           <TabsContent value="live" className="mt-3 space-y-3">
             <LivePanel />
+          </TabsContent>
+          <TabsContent value="stress" className="mt-3 space-y-3">
+            <StressPanel />
+          </TabsContent>
+          <TabsContent value="strategy" className="mt-3 space-y-3">
+            <StrategyPanel month="2026-09" />
           </TabsContent>
         </Tabs>
       </View>

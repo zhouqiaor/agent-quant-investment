@@ -73,14 +73,21 @@ export class LivePortfolio {
   /**
    * mark-to-market
    */
-  markToMarket(): { unrealizedPnl: number; equity: number } {
+  markToMarket(): { unrealizedPnl: number; equity: number; marketValue: number } {
     let unrealized = 0
+    let marketValue = 0
     for (const [symbol, pos] of Object.entries(this.positions)) {
       const px = this.lastPrices[symbol]
       if (px == null) continue
+      marketValue += px * pos.qty
       unrealized += (px - pos.avgCost) * pos.qty
     }
-    return { unrealizedPnl: unrealized, equity: this.cash + unrealized }
+    return {
+      unrealizedPnl: unrealized,
+      marketValue,
+      // equity = 现金 + 所有持仓市值（与 initialCash + realizedPnl + unrealized 等价）
+      equity: this.cash + marketValue,
+    }
   }
 
   /**
@@ -125,6 +132,13 @@ export class LivePortfolio {
       equity: Number(equity.toFixed(2)),
       equityCurve: [...this._equityCurve],
     }
+  }
+
+  /**
+   * 返回纯数值版权益曲线（仅用于后端风险指标计算）
+   */
+  equityHistory(): number[] {
+    return this._equityCurve.map((p) => p.equity)
   }
 
   /**

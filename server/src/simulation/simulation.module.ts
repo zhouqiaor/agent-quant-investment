@@ -13,6 +13,14 @@ import { LiveStrategyAdapter } from './live-strategy-adapter'
 import { MockMatchEngine } from './mock-match-engine'
 import { LiveSimulationEngine } from './live-simulation.engine'
 import { LiveController } from './live-simulation.controller'
+import { GlossaryService } from './glossary.service'
+import { GlossaryController } from './glossary.controller'
+import { ScenarioKlineService } from './scenario-kline.service'
+import { ScenarioReplayService } from './scenario-replay.service'
+import { ScenarioController } from './scenario.controller'
+import { StrategyTemplateService } from './strategy-template.service'
+import { TryoutReplayService } from './tryout-replay.service'
+import { StrategyTemplateController } from './strategy-template.controller'
 
 @Module({
   imports: [PersistenceModule],
@@ -28,8 +36,13 @@ import { LiveController } from './live-simulation.controller'
     LiveStrategyAdapter,
     MockMatchEngine,
     LiveSimulationEngine,
+    GlossaryService,
+    ScenarioKlineService,
+    ScenarioReplayService,
+    StrategyTemplateService,
+    TryoutReplayService,
   ],
-  controllers: [SimulationController, LiveController],
+  controllers: [SimulationController, LiveController, GlossaryController, ScenarioController, StrategyTemplateController],
   exports: [
     SimulationScheduler,
     SimulationReportService,
@@ -41,6 +54,11 @@ import { LiveController } from './live-simulation.controller'
     LiveStrategyAdapter,
     MockMatchEngine,
     LiveSimulationEngine,
+    GlossaryService,
+    ScenarioKlineService,
+    ScenarioReplayService,
+    StrategyTemplateService,
+    TryoutReplayService,
   ],
 })
 export class SimulationModule {}

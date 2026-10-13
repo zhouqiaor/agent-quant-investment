@@ -162,3 +162,43 @@ jobs:
 
       - name: Build web
         run: pnpm build:web
+
+  # 微信小程序自动发布（上传体验版）
+  # 前置条件：
+  #   1. 仓库 Secrets 配置 WEAPP_APPID 与 WEAPP_PRIVATE_KEY（mp 后台"小程序代码上传"密钥全文）
+  #   2. mp.weixin.qq.com → 开发管理 → 开发设置 → 小程序代码上传：关闭 IP 白名单
+  # 说明：miniprogram-ci 只能自动到"上传体验版"，提交审核与线上发布需在 mp 后台人工确认
+  publish-weapp:
+    name: Publish WeApp (体验版)
+    runs-on: ubuntu-latest
+    needs: [validate, test-server, test-web, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Write upload key
+        run: |
+          mkdir -p key
+          printf '%s' "$WEAPP_PRIVATE_KEY" > key/private.appid.key
+        env:
+          WEAPP_PRIVATE_KEY: ${{ secrets.WEAPP_PRIVATE_KEY }}
+
+      - name: Build & upload to WeChat
+        run: pnpm build:weapp
+        env:
+          TARO_APP_WEAPP_APPID: ${{ secrets.WEAPP_APPID }}

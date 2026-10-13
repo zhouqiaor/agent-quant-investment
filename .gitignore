@@ -36,8 +36,8 @@ pnpm-debug.log*
 # OS X
 .DS_Store
 
-# Key
-# key/
+# Key（小程序代码上传私钥，敏感，严禁入库）
+key/
 
 # Preview files
 .preview

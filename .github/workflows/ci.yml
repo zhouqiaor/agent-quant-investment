@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm # 缓存 pnpm store（基于 pnpm-lock.yaml）
 
       - name: Install dependencies
@@ -51,7 +51,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -80,45 +80,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # better-sqlite3 预编译二进制在 ubuntu runner 上 require 即 SIGSEGV，
-      # 强制从源码编译以排除预编译产物兼容性问题
-      - name: Rebuild better-sqlite3 from source
-        working-directory: server
-        run: pnpm rebuild better-sqlite3
-        env:
-          npm_config_build_from_source: "true"
-
-      # 【临时诊断】最小复现：直接 require better-sqlite3 并建内存库
-      - name: Diag - minimal sqlite probe
-        continue-on-error: true
-        working-directory: server
-        run: node -e "const D=require('better-sqlite3');const db=new D(':memory:');db.exec('CREATE TABLE t(a)');console.log('sqlite ok',db.prepare('select sqlite_version() v').get())"
-
-      # 【临时诊断】单套件 in-band 运行（排除 Jest worker 因素），输出真实报错
-      - name: Diag - single suite in band
-        continue-on-error: true
-        working-directory: server
-        run: pnpm exec jest src/persistence/persistence.service.spec.ts --runInBand --ci 2>&1 | tail -60
-
-      # 【临时诊断】版本矩阵探针：预编译 13.0.3 / 源码编译 13.0.3 / 旧版 12.4.1
-      - name: Diag - version matrix probes
-        continue-on-error: true
-        run: |
-          set -x
-          node -p "process.version + ' ' + process.platform + ' ' + process.arch"
-          ldd "$(pwd)/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3/build/Release/better_sqlite3.node" || true
-          cd /tmp
-          rm -rf probe-a probe-b probe-c
-          mkdir probe-a probe-b probe-c
-          cd probe-a && npm init -y >/dev/null && npm i better-sqlite3@13.0.3 --no-audit --no-fund && node -e "console.log('prebuilt 13.0.3 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-a exit=$?"
-          cd ../probe-b && npm init -y >/dev/null && npm i better-sqlite3@13.0.3 --no-audit --no-fund --build-from-source && node -e "console.log('source 13.0.3 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-b exit=$?"
-          cd ../probe-c && npm init -y >/dev/null && npm i better-sqlite3@12.4.1 --no-audit --no-fund && node -e "console.log('prebuilt 12.4.1 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-c exit=$?"
 
       - name: Run server tests
         working-directory: server
@@ -150,7 +116,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -185,7 +151,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -219,7 +185,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies

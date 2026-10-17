@@ -273,6 +273,13 @@ export class PersistenceService implements OnModuleInit {
     } catch {
       /* 列已存在 */
     }
+
+    // 旧库迁移：notifications 补充 signalId 列（dedup 必需）
+    try {
+      this.db.exec('ALTER TABLE notifications ADD COLUMN signalId TEXT');
+    } catch {
+      /* 列已存在 */
+    }
   }
 
   // ==================== K 线缓存（5 分钟 TTL，StockService 写入） ====================

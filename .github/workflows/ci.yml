@@ -106,6 +106,20 @@ jobs:
         working-directory: server
         run: pnpm exec jest src/persistence/persistence.service.spec.ts --runInBand --ci 2>&1 | tail -60
 
+      # 【临时诊断】版本矩阵探针：预编译 13.0.3 / 源码编译 13.0.3 / 旧版 12.4.1
+      - name: Diag - version matrix probes
+        continue-on-error: true
+        run: |
+          set -x
+          node -p "process.version + ' ' + process.platform + ' ' + process.arch"
+          ldd "$(pwd)/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3/build/Release/better_sqlite3.node" || true
+          cd /tmp
+          rm -rf probe-a probe-b probe-c
+          mkdir probe-a probe-b probe-c
+          cd probe-a && npm init -y >/dev/null && npm i better-sqlite3@13.0.3 --no-audit --no-fund && node -e "console.log('prebuilt 13.0.3 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-a exit=$?"
+          cd ../probe-b && npm init -y >/dev/null && npm i better-sqlite3@13.0.3 --no-audit --no-fund --build-from-source && node -e "console.log('source 13.0.3 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-b exit=$?"
+          cd ../probe-c && npm init -y >/dev/null && npm i better-sqlite3@12.4.1 --no-audit --no-fund && node -e "console.log('prebuilt 12.4.1 ok', new (require('better-sqlite3'))(':memory:').prepare('select 1 x').get())"; echo "probe-c exit=$?"
+
       - name: Run server tests
         working-directory: server
         # --ci：失败即红，不进入 watch / 交互模式；--coverage：采集覆盖率并执行 coverageThreshold 门禁

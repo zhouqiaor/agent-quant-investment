@@ -24,6 +24,7 @@
     "new": "taro new",
     "preview:tt": "taro build --type tt --preview",
     "preview:weapp": "taro build --type weapp --preview",
+    "upload:weapp": "taro upload --type weapp",
     "tsc": "npx tsc --noEmit --skipLibCheck",
     "test:web": "jest --config jest.config.js",
     "validate": "pnpm exec concurrently --kill-others-on-fail --kill-signal SIGKILL -n lint,tsc -c red,blue \"pnpm lint:build\" \"pnpm tsc\""

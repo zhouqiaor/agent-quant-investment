@@ -2,7 +2,7 @@
   "miniprogramRoot": "./dist",
   "projectname": "coze-mini-program",
   "description": "test",
-  "appid": "touristappid",
+  "appid": "wx28e1d528342e987d",
   "setting": {
     "urlCheck": true,
     "es6": false,

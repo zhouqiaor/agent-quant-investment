@@ -198,7 +198,13 @@ jobs:
         env:
           WEAPP_PRIVATE_KEY: ${{ secrets.WEAPP_PRIVATE_KEY }}
 
-      - name: Build & upload to WeChat
+      - name: Build weapp
         run: pnpm build:weapp
+        env:
+          TARO_APP_WEAPP_APPID: ${{ secrets.WEAPP_APPID }}
+
+      # plugin-mini-ci 的独立 upload 命令：上传 dist/ 为体验版
+      - name: Upload to WeChat
+        run: pnpm upload:weapp
         env:
           TARO_APP_WEAPP_APPID: ${{ secrets.WEAPP_APPID }}

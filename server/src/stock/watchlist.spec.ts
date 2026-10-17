@@ -10,19 +10,25 @@ import { WatchlistService } from './watchlist.service';
 describe('WatchlistService - 关注列表', () => {
   let persistence: PersistenceService;
   let service: WatchlistService;
-  const dbPath = `/tmp/watchlist-test-${Date.now()}.db`;
+  let dbPath: string;
 
   beforeEach(() => {
+    // 每个用例独立 db 文件，避免跨用例数据累积（Windows 下未 close 的文件无法 unlink）
+    dbPath = `/tmp/watchlist-test-${Date.now()}-${Math.floor(Math.random() * 1e6)}.db`;
     persistence = new PersistenceService(dbPath);
     persistence.init();
     service = new WatchlistService(persistence);
   });
 
   afterEach(() => {
-    try {
-      require('fs').unlinkSync(dbPath);
-    } catch (e) {
-      /* ignore */
+    // 必须先 close 释放文件句柄，Windows 上才能真正删除
+    persistence.close?.();
+    for (const suffix of ['', '-wal', '-shm']) {
+      try {
+        require('fs').unlinkSync(dbPath + suffix);
+      } catch (e) {
+        /* ignore */
+      }
     }
   });
 

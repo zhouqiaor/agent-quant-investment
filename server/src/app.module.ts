@@ -18,9 +18,11 @@ import { BetaModule } from '@/beta/beta.module';
 import { DataSourceModule } from '@/data-source/data-source.module';
 import { ABTestModule } from '@/ab-test/ab-test.module';
 import { SimulationModule } from '@/simulation/simulation.module';
+import { ScreenerModule } from '@/screener/screener.module';
+import { PortfolioModule } from '@/portfolio/portfolio.module';
 
 @Module({
-  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, DataSourceModule, ABTestModule, SimulationModule],
+  imports: [PersistenceModule, MarketModule, AssetModule, StrategyModule, AgentModule, TradeModule, RiskModule, StockModule, AgentAnalysisModule, BacktestModule, PaperTradingModule, OptimizerModule, NotificationModule, BetaModule, DataSourceModule, ABTestModule, SimulationModule, ScreenerModule, PortfolioModule],
   controllers: [AppController],
   providers: [AppService],
 })

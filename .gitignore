@@ -36,8 +36,8 @@ pnpm-debug.log*
 # OS X
 .DS_Store
 
-# Key
-# key/
+# Key（小程序代码上传私钥，敏感，严禁入库）
+key/
 
 # Preview files
 .preview
@@ -54,3 +54,7 @@ server/data/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+
+# Jest 覆盖率产物（CI artifact，不入库）
+coverage/
+server/coverage/

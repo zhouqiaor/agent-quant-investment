@@ -1,4 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  DEFAULT_INDICATOR_CONFIG,
+  IndicatorBundle,
+  IndicatorCalcService,
+  IndicatorConfig,
+} from '@/indicators';
+import type { KlineData } from '@/stock/stock.service';
 
 export interface Strategy {
   id: string;
@@ -60,6 +67,7 @@ export interface MonitorSignal {
 
 @Injectable()
 export class StrategyService {
+  constructor(private readonly indicatorCalc: IndicatorCalcService) {}
   private strategies: Strategy[] = [
     {
       id: 's1',
@@ -355,5 +363,166 @@ export class StrategyService {
 
   getMonitorSignals(limit = 10): MonitorSignal[] {
     return this.monitorSignals.slice(0, limit);
+  }
+
+  /**
+   * 信号原因增强：在原有 reason 基础上，附加最新一日的指标信号标签（MACD金叉/KDJ超卖等）
+   *
+   * - 无 klines：原样返回 baseReason（向后兼容）
+   * - 有 klines：计算 indicators，识别最新一日的 cross/break/extreme，附加为 " · 标签"
+   *
+   * indicatorConfig：可选指标配置（来自 customStrategy.indicatorParams）。
+   * 缺省/非法 → 静默回退 DEFAULT_INDICATOR_CONFIG（不抛错，reason 仍增强）。
+   *
+   * 注意：本方法为公开 API，便于外部（如 LivePnlService）调用以丰富已生成的信号
+   */
+  enrichSignalReason(
+    baseReason: string,
+    klines: KlineData[] | undefined,
+    indicatorConfig?: IndicatorConfig,
+  ): string {
+    if (!klines || klines.length === 0) return baseReason;
+    let config = DEFAULT_INDICATOR_CONFIG;
+    if (indicatorConfig) {
+      try {
+        config = this.normalizeStrategyConfig(indicatorConfig);
+      } catch {
+        // 校验失败 → 静默回退默认（不阻塞 reason 增强）
+        config = DEFAULT_INDICATOR_CONFIG;
+      }
+    }
+    const indicators: IndicatorBundle = this.indicatorCalc.computeAll(klines, config);
+    const last = klines.length - 1;
+    const tags: string[] = [];
+
+    const macdCross = indicators.macd.crosses.find((c) => c.index === last);
+    if (macdCross?.type === 'golden') tags.push('MACD金叉');
+    if (macdCross?.type === 'death') tags.push('MACD死叉');
+
+    const bollBreak = indicators.boll.breaks.find((b) => b.index === last);
+    if (bollBreak?.type === 'upper') tags.push('BOLL突破上轨');
+    if (bollBreak?.type === 'lower') tags.push('BOLL跌破下轨');
+
+    const kdjExtreme = indicators.kdj.extremes.find((k) => k.index === last);
+    if (kdjExtreme?.type === 'oversold') tags.push('KDJ超卖');
+    if (kdjExtreme?.type === 'overbought') tags.push('KDJ超买');
+
+    if (tags.length === 0) return baseReason;
+    return `${baseReason} · ${tags.join(' · ')}`;
+  }
+
+  /**
+   * 从 customStrategy.indicatorParams 构造 IndicatorConfig
+   *
+   * 形态约定（兼容旧代码）：
+   *   indicatorParams: {
+   *     ma?:  { periods: number[] }      // 或 { period: number } 单值
+   *     macd?: { fast, slow, signal }
+   *     boll?: { period, k }
+   *     kdj?:  { n, m1, m2 }
+   *   }
+   *
+   * 任何字段缺省/非法 → 抛 BadRequestException，由调用方决定回退策略
+   * （enrichSignalReason 内部捕获并回退默认；外部直接调用 buildStrategyConfig 则不 catch）。
+   */
+  buildStrategyConfig(
+    indicatorParams: Record<string, Record<string, unknown>> | undefined | null,
+  ): IndicatorConfig {
+    if (!indicatorParams || typeof indicatorParams !== 'object') {
+      return DEFAULT_INDICATOR_CONFIG;
+    }
+    const cfg: Partial<IndicatorConfig> = {};
+
+    if (indicatorParams.ma && typeof indicatorParams.ma === 'object') {
+      const ma = indicatorParams.ma as { periods?: unknown; period?: unknown };
+      if (Array.isArray(ma.periods)) {
+        cfg.maPeriods = ma.periods.map((p) => Number(p));
+      } else if (typeof ma.period === 'number') {
+        cfg.maPeriods = [ma.period];
+      }
+    }
+    if (indicatorParams.macd && typeof indicatorParams.macd === 'object') {
+      const m = indicatorParams.macd as { fast?: number; slow?: number; signal?: number };
+      cfg.macd = {
+        fast: Number(m.fast ?? DEFAULT_INDICATOR_CONFIG.macd.fast),
+        slow: Number(m.slow ?? DEFAULT_INDICATOR_CONFIG.macd.slow),
+        signal: Number(m.signal ?? DEFAULT_INDICATOR_CONFIG.macd.signal),
+      };
+    }
+    if (indicatorParams.boll && typeof indicatorParams.boll === 'object') {
+      const b = indicatorParams.boll as { period?: number; k?: number };
+      cfg.boll = {
+        period: Number(b.period ?? DEFAULT_INDICATOR_CONFIG.boll.period),
+        k: Number(b.k ?? DEFAULT_INDICATOR_CONFIG.boll.k),
+      };
+    }
+    if (indicatorParams.kdj && typeof indicatorParams.kdj === 'object') {
+      const k = indicatorParams.kdj as { n?: number; m1?: number; m2?: number };
+      cfg.kdj = {
+        n: Number(k.n ?? DEFAULT_INDICATOR_CONFIG.kdj.n),
+        m1: Number(k.m1 ?? DEFAULT_INDICATOR_CONFIG.kdj.m1),
+        m2: Number(k.m2 ?? DEFAULT_INDICATOR_CONFIG.kdj.m2),
+      };
+    }
+
+    return this.normalizeStrategyConfig(cfg);
+  }
+
+  /**
+   * 校验 + 规范化指标配置。
+   * 校验失败抛 BadRequestException。
+   */
+  private normalizeStrategyConfig(input: Partial<IndicatorConfig>): IndicatorConfig {
+    const cfg: Partial<IndicatorConfig> = input;
+
+    let maPeriods: number[] = cfg.maPeriods ?? DEFAULT_INDICATOR_CONFIG.maPeriods;
+    if (!Array.isArray(maPeriods) || maPeriods.length === 0) {
+      maPeriods = DEFAULT_INDICATOR_CONFIG.maPeriods;
+    }
+    const cleaned: number[] = [];
+    for (const p of maPeriods) {
+      if (typeof p !== 'number' || !Number.isInteger(p) || p < 1 || p > 200) {
+        throw new BadRequestException(`maPeriods 非法：每个元素必须是 1..200 的正整数`);
+      }
+      if (!cleaned.includes(p)) cleaned.push(p);
+    }
+    cleaned.sort((a, b) => a - b);
+    if (cleaned.length === 0) {
+      throw new BadRequestException('maPeriods 不能为空');
+    }
+    maPeriods = cleaned;
+
+    const macd = cfg.macd ?? DEFAULT_INDICATOR_CONFIG.macd;
+    if (
+      typeof macd.fast !== 'number' || !Number.isInteger(macd.fast) || macd.fast < 1 || macd.fast > 200 ||
+      typeof macd.slow !== 'number' || !Number.isInteger(macd.slow) || macd.slow < 1 || macd.slow > 200 ||
+      typeof macd.signal !== 'number' || !Number.isInteger(macd.signal) || macd.signal < 1 || macd.signal > 200
+    ) {
+      throw new BadRequestException('macd 参数非法（必须 1..200 正整数）');
+    }
+    if (macd.fast >= macd.slow) {
+      throw new BadRequestException(
+        `macd.fast (${macd.fast}) 必须 < slow (${macd.slow})`,
+      );
+    }
+
+    const boll = cfg.boll ?? DEFAULT_INDICATOR_CONFIG.boll;
+    if (typeof boll.period !== 'number' || !Number.isInteger(boll.period) || boll.period < 1 || boll.period > 200) {
+      throw new BadRequestException('boll.period 非法（必须 1..200 正整数）');
+    }
+    if (typeof boll.k !== 'number' || !Number.isFinite(boll.k) || boll.k < 0.1 || boll.k > 5) {
+      throw new BadRequestException('boll.k 非法（必须 0.1..5）');
+    }
+
+    const kdj = cfg.kdj ?? DEFAULT_INDICATOR_CONFIG.kdj;
+    if (
+      typeof kdj.n !== 'number' || !Number.isInteger(kdj.n) || kdj.n < 1 || kdj.n > 200 ||
+      typeof kdj.m1 !== 'number' || !Number.isInteger(kdj.m1) || kdj.m1 < 1 || kdj.m1 > 200 ||
+      typeof kdj.m2 !== 'number' || !Number.isInteger(kdj.m2) || kdj.m2 < 1 || kdj.m2 > 200
+    ) {
+      throw new BadRequestException('kdj 参数非法（必须 1..200 正整数）');
+    }
+
+    return { maPeriods, macd, boll, kdj };
   }
 }

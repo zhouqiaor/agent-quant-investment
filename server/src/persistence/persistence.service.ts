@@ -88,6 +88,7 @@ export interface NotificationRecord {
   title?: string;
   content?: string;
   symbol?: string;
+  signalId?: string;
   signalType?: string;
   price?: number;
   source?: string;
@@ -303,6 +304,7 @@ export class PersistenceService implements OnModuleInit {
         pe REAL,
         pb REAL,
         mktcap REAL,
+        turnoverratio REAL,
         updatedAt INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_directory_name ON stock_directory(name);
@@ -323,6 +325,7 @@ export class PersistenceService implements OnModuleInit {
         title TEXT,
         content TEXT,
         symbol TEXT,
+        signalId TEXT,
         signalType TEXT,
         price REAL,
         source TEXT,
@@ -444,7 +447,75 @@ export class PersistenceService implements OnModuleInit {
         ts INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sim_trades_run_acc ON sim_trades(run_id, account_id, ts);
+
+      CREATE TABLE IF NOT EXISTS kline_cache (
+        symbol TEXT,
+        period TEXT,
+        limit_n INTEGER,
+        payload TEXT,
+        indicators TEXT,
+        fetched_at INTEGER,
+        PRIMARY KEY (symbol, period, limit_n)
+      );
+      CREATE INDEX IF NOT EXISTS idx_kline_cache_fetched ON kline_cache(fetched_at);
     `);
+
+    // 旧库迁移：stock_directory 补充 turnoverratio 列（已存在则忽略）
+    try {
+      this.db.exec('ALTER TABLE stock_directory ADD COLUMN turnoverratio REAL');
+    } catch {
+      /* 列已存在 */
+    }
+
+    // 旧库迁移：notifications 补充 signalId 列（dedup 必需）
+    try {
+      this.db.exec('ALTER TABLE notifications ADD COLUMN signalId TEXT');
+    } catch {
+      /* 列已存在 */
+    }
+  }
+
+  // ==================== K 线缓存（5 分钟 TTL，StockService 写入） ====================
+  /** 读取单条 K 缓存；未命中返回 null */
+  getKlineCache(
+    symbol: string,
+    period: string,
+    limit: number,
+  ): { payload: string; indicators: string | null; fetched_at: number } | null {
+    const row = this.db
+      .prepare(
+        'SELECT payload, indicators, fetched_at FROM kline_cache WHERE symbol = ? AND period = ? AND limit_n = ?',
+      )
+      .get(symbol, period, limit) as
+      | { payload: string; indicators: string | null; fetched_at: number }
+      | undefined;
+    if (!row) return null;
+    return {
+      payload: row.payload,
+      indicators: row.indicators,
+      fetched_at: row.fetched_at,
+    };
+  }
+
+  /**
+   * 写入/覆盖 K 缓存
+   * @param fetchedAt 可选；不传则使用 Date.now()，便于测试覆写历史时间
+   */
+  setKlineCache(
+    symbol: string,
+    period: string,
+    limit: number,
+    payload: string,
+    indicators: string | null,
+    fetchedAt?: number,
+  ): void {
+    const ts = typeof fetchedAt === 'number' ? fetchedAt : Date.now();
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO kline_cache (symbol, period, limit_n, payload, indicators, fetched_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(symbol, period, limit, payload, indicators, ts);
   }
 
   // ==================== 自定义策略 ====================
@@ -948,23 +1019,29 @@ export class PersistenceService implements OnModuleInit {
       pe: number | null;
       pb: number | null;
       mktcap: number | null;
+      turnoverratio: number | null;
     }>,
   ): void {
     if (rows.length === 0) return;
     const stmt = this.db.prepare(
       `INSERT OR REPLACE INTO stock_directory
-       (symbol, name, market, price, changePercent, pe, pb, mktcap, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (symbol, name, market, price, changePercent, pe, pb, mktcap, turnoverratio, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const now = Date.now();
     this.db.transaction((batch: typeof rows) => {
       for (const r of batch) {
-        stmt.run(r.symbol, r.name, r.market, r.price, r.changePercent, r.pe, r.pb, r.mktcap, now);
+        stmt.run(r.symbol, r.name, r.market, r.price, r.changePercent, r.pe, r.pb, r.mktcap, r.turnoverratio, now);
       }
     })(rows);
   }
 
-  /** 搜索目录：代码前缀优先 + 名称包含，去重合并 */
+  /**
+   * 搜索目录：代码前缀优先 + 名称包含，去重合并
+   *
+   * 当 q 为空字符串时返回全量目录（按 symbol 排序），上限 limit 条。
+   * 这样选股器等需要"全集"的下游不必再走额外 SQL 路径。
+   */
   searchDirectory(
     q: string,
     limit = 20,
@@ -974,12 +1051,27 @@ export class PersistenceService implements OnModuleInit {
     market: string;
     price: number;
     changePercent: number;
+    turnoverratio: number | null;
   }> {
     const query = q.trim();
-    if (!query) return [];
+    if (!query) {
+      const rows = this.db
+        .prepare(
+          'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory ORDER BY symbol LIMIT ?',
+        )
+        .all(limit) as Array<{
+        symbol: string;
+        name: string;
+        market: string;
+        price: number;
+        changePercent: number;
+        turnoverratio: number | null;
+      }>;
+      return rows;
+    }
     const byCode = this.db
       .prepare(
-        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE symbol LIKE ? ORDER BY symbol LIMIT ?',
+        'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory WHERE symbol LIKE ? ORDER BY symbol LIMIT ?',
       )
       .all(`${query}%`, limit) as Array<{
       symbol: string;
@@ -987,10 +1079,11 @@ export class PersistenceService implements OnModuleInit {
       market: string;
       price: number;
       changePercent: number;
+      turnoverratio: number | null;
     }>;
     const byName = this.db
       .prepare(
-        'SELECT symbol, name, market, price, changePercent FROM stock_directory WHERE name LIKE ? ORDER BY symbol LIMIT ?',
+        'SELECT symbol, name, market, price, changePercent, turnoverratio FROM stock_directory WHERE name LIKE ? ORDER BY symbol LIMIT ?',
       )
       .all(`%${query}%`, limit) as Array<{
       symbol: string;
@@ -998,6 +1091,7 @@ export class PersistenceService implements OnModuleInit {
       market: string;
       price: number;
       changePercent: number;
+      turnoverratio: number | null;
     }>;
     const seen = new Set(byCode.map((r) => r.symbol));
     return [...byCode, ...byName.filter((r) => !seen.has(r.symbol))].slice(0, limit);
@@ -1470,18 +1564,19 @@ export class PersistenceService implements OnModuleInit {
   }
 
   // ==================== 通知 ====================
-  saveNotification(record: NotificationRecord & { id?: string }): string {
+  saveNotification(record: NotificationRecord & { id?: string; signalId?: string }): string {
     const id = record.id || `ntf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.db
       .prepare(
-        `INSERT INTO notifications (id, title, content, symbol, signalType, price, source, read, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO notifications (id, title, content, symbol, signalId, signalType, price, source, read, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
         record.title || '',
         record.content || '',
         record.symbol || '',
+        (record as any).signalId || '',
         record.signalType || '',
         record.price ?? null,
         record.source || '',
@@ -1515,6 +1610,7 @@ export class PersistenceService implements OnModuleInit {
       title: r.title,
       content: r.content,
       symbol: r.symbol,
+      signalId: r.signalId,
       signalType: r.signalType,
       price: r.price,
       source: r.source,

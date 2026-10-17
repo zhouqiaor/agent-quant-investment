@@ -5,6 +5,7 @@ import { NotificationService } from '../notification/notification.service';
 import { WatchlistService } from '../stock/watchlist.service';
 import { BetaConfigService } from './beta-config.service';
 import { LivePnlService } from './live-pnl.service';
+import { IndicatorCalcService } from '@/indicators';
 
 /**
  * 阶段3 TDD：实时行情联动收益 + 信号自动交易
@@ -45,7 +46,7 @@ describe('LivePnlService - 实时收益与自动交易', () => {
   beforeEach(() => {
     persistence = new PersistenceService(dbPath);
     persistence.init();
-    strategy = new StrategyService();
+    strategy = new StrategyService(new IndicatorCalcService());
     paper = new PaperTradingService(strategy, persistence);
     notification = new NotificationService(persistence);
     watchlist = new WatchlistService(persistence);

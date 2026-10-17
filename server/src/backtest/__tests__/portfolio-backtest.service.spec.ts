@@ -6,6 +6,7 @@ import { PaperTradingService } from '../../paper-trading/paper-trading.service';
 import { StrategyService } from '../../strategy/strategy.service';
 import { HistoryKlineService } from '../../stock/history-kline.service';
 import { PersistenceModule } from '../../persistence/persistence.module';
+import { IndicatorCalcService } from '../../indicators';
 
 describe('PortfolioBacktestService', () => {
   let service: PortfolioBacktestService;
@@ -37,6 +38,7 @@ describe('PortfolioBacktestService', () => {
         { provide: HistoryKlineService, useValue: mockHistoryKlineService },
         PaperTradingService,
         StrategyService,
+        IndicatorCalcService,
       ],
     }).compile();
 

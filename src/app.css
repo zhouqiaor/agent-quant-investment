@@ -97,7 +97,53 @@ root-portal {
   --selection-foreground: lab(7.78201% -0.0000149012 0);
 }
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, [data-theme='dark'] *));
+
+/* ============================================
+   亮色主题 token
+   - 仅在用户显式选择浅色（.light / [data-theme="light"]）时生效
+   - 默认 :root 保持深色，确保首次访问视觉不变
+   - 当前页面大量使用硬编码 slate-* / text-slate-* 类，
+     这些不会随主题变化；切换主要影响 CSS var-based 表面
+     （如 .taro_page bg、Tailwind 主题色 bg-background 等）。
+   ============================================ */
+.light,
+[data-theme='light'] {
+  --background: #f8fafc;            /* slate-50 */
+  --foreground: #0f172a;            /* slate-900 */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #10b981;               /* emerald-500 */
+  --primary-foreground: #ffffff;
+  --secondary: #e2e8f0;             /* slate-200 */
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;                 /* slate-100 */
+  --muted-foreground: #64748b;      /* slate-500 */
+  --accent: #e2e8f0;                /* slate-200 */
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #10b981;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #10b981;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #10b981;
+  --surface: #ffffff;
+  --surface-foreground: #64748b;
+  --code: var(--surface);
+  --code-highlight: #f1f5f9;
+  --code-number: #64748b;
+  --selection: #10b981;
+  --selection-foreground: #ffffff;
+}
 
 @theme inline {
   --color-sidebar: var(--sidebar);
@@ -179,6 +225,12 @@ html, body {
 
 body {
   background-color: #070a0f;
+}
+
+.light body,
+[data-theme='light'] body,
+body.light {
+  background-color: #f8fafc;
 }
 
 #app {

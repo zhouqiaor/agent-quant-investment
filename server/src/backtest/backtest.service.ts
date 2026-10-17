@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, ServiceUnavailableException } 
 import { StrategyService } from '../strategy/strategy.service';
 import { MarketService } from '../market/market.service';
 import { HistoryKlineService, KlineData } from '../stock/history-kline.service';
+import { ma, macd } from '@/indicators';
 
 interface BacktestRequest {
   strategyId?: string;
@@ -299,11 +300,17 @@ export class BacktestService {
     let avgCost = 0;  // 平均成本
     let peakValue = initialCapital;
 
-    // 计算技术指标
-    const ma5 = this.calculateMA(klineData.map(k => k.close), 5);
-    const ma20 = this.calculateMA(klineData.map(k => k.close), 20);
-    const macd = this.calculateMACD(klineData.map(k => k.close));
-    const rsi = this.calculateRSI(klineData.map(k => k.close), 14);
+    // 计算技术指标（MA/MACD 复用 indicators 模块；null → 0 保持既有索引访问语义）
+    const closes = klineData.map(k => k.close);
+    const ma5 = ma(closes, 5).map(v => (v ?? 0));
+    const ma20 = ma(closes, 20).map(v => (v ?? 0));
+    const macdRaw = macd(closes);
+    const macdSeries = macdRaw.dif.map((d, idx) => ({
+      dif: d ?? 0,
+      dea: macdRaw.dea[idx] ?? 0,
+      macd: macdRaw.hist[idx] ?? 0,
+    }));
+    const rsi = this.calculateRSI(closes, 14);
 
     for (let i = 20; i < klineData.length; i++) {
       const today = klineData[i];
@@ -311,10 +318,10 @@ export class BacktestService {
 
       // 生成买入/卖出信号
       const buySignal = this.generateBuySignal(
-        i, today, yesterday, ma5, ma20, macd, rsi, indicators, buyConditions,
+        i, today, yesterday, ma5, ma20, macdSeries, rsi, indicators, buyConditions,
       );
       const sellSignal = this.generateSellSignal(
-        i, today, yesterday, ma5, ma20, macd, rsi, indicators, sellConditions, position, avgCost,
+        i, today, yesterday, ma5, ma20, macdSeries, rsi, indicators, sellConditions, position, avgCost,
       );
 
       // 执行交易
@@ -449,55 +456,6 @@ export class BacktestService {
     }
 
     return signals.length > 0 ? signals.join('+') : null;
-  }
-
-  private calculateMA(prices: number[], period: number): number[] {
-    const result: number[] = [];
-    for (let i = 0; i < prices.length; i++) {
-      if (i < period - 1) {
-        result.push(0);
-      } else {
-        const sum = prices.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
-        result.push(sum / period);
-      }
-    }
-    return result;
-  }
-
-  private calculateMACD(prices: number[], fast = 12, slow = 26, signal = 9) {
-    const emaFast = this.calculateEMA(prices, fast);
-    const emaSlow = this.calculateEMA(prices, slow);
-
-    const dif: number[] = [];
-    for (let i = 0; i < prices.length; i++) {
-      dif.push(emaFast[i] - emaSlow[i]);
-    }
-
-    const dea = this.calculateEMA(dif, signal);
-
-    const result: { dif: number; dea: number; macd: number }[] = [];
-    for (let i = 0; i < prices.length; i++) {
-      result.push({
-        dif: dif[i],
-        dea: dea[i],
-        macd: (dif[i] - dea[i]) * 2,
-      });
-    }
-    return result;
-  }
-
-  private calculateEMA(prices: number[], period: number): number[] {
-    const result: number[] = [];
-    const multiplier = 2 / (period + 1);
-
-    for (let i = 0; i < prices.length; i++) {
-      if (i === 0) {
-        result.push(prices[0]);
-      } else {
-        result.push((prices[i] - result[i - 1]) * multiplier + result[i - 1]);
-      }
-    }
-    return result;
   }
 
   private calculateRSI(prices: number[], period: number): number[] {

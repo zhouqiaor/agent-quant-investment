@@ -7,7 +7,10 @@ import { CandleChart } from '@/components/chart/candle-chart'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { TrendingUp, TrendingDown, DollarSign, ChartPie } from 'lucide-react-taro'
+import { TrendingUp, TrendingDown, DollarSign, ChartPie, Settings as SettingsIcon } from 'lucide-react-taro'
+import type { IndicatorBundle } from '@/lib/indicators/types'
+import { useAnimatedNumber } from '@/lib/use-animated-number'
+import { useIndicatorSettingsStore } from '@/stores/indicator-settings'
 
 interface PositionDetail {
   symbol: string
@@ -35,22 +38,50 @@ export default function PositionPage() {
   const [buyPrice, setBuyPrice] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [kline, setKline] = useState<any[]>([])
+  const [klineIndicators, setKlineIndicators] = useState<IndicatorBundle | undefined>(undefined)
   const [klinePeriod, setKlinePeriod] = useState<'30' | '60' | '120'>('30')
+
+  // 用户自定义指标参数（来自 indicator-settings store）
+  const indicatorConfig = useIndicatorSettingsStore((s) => s.config)
 
   const loadKline = useCallback(async () => {
     try {
       const res = await Network.request({
         url: '/api/stock/kline',
-        data: { symbol, period: 'daily', limit: klinePeriod },
+        data: {
+          symbol,
+          period: 'daily',
+          limit: klinePeriod,
+          withIndicators: true,
+          maPeriods: indicatorConfig.maPeriods.join(','),
+          macdFast: indicatorConfig.macd.fast,
+          macdSlow: indicatorConfig.macd.slow,
+          macdSignal: indicatorConfig.macd.signal,
+          bollPeriod: indicatorConfig.boll.period,
+          bollK: indicatorConfig.boll.k,
+          kdjN: indicatorConfig.kdj.n,
+          kdjM1: indicatorConfig.kdj.m1,
+          kdjM2: indicatorConfig.kdj.m2,
+        },
       })
-      const list = res.data?.data || []
-      // 最近 N 根
-      setKline(list.slice(-parseInt(klinePeriod)))
+      const payload = res.data?.data
+      // 新接口：{ klines: [...], indicators: {...} }；旧接口：纯数组
+      if (payload && Array.isArray(payload.klines)) {
+        setKline(payload.klines)
+        setKlineIndicators(payload.indicators ?? undefined)
+      } else if (Array.isArray(payload)) {
+        setKline(payload)
+        setKlineIndicators(undefined)
+      } else {
+        setKline([])
+        setKlineIndicators(undefined)
+      }
     } catch (e) {
       console.error('[position] kline error', e)
       setKline([])
+      setKlineIndicators(undefined)
     }
-  }, [symbol, klinePeriod])
+  }, [symbol, klinePeriod, indicatorConfig])
 
   const loadPosition = useCallback(async () => {
     setLoading(true)
@@ -135,6 +166,11 @@ export default function PositionPage() {
 
   const isProfit = (position?.pnl ?? 0) >= 0
 
+  // 数字滚动动画：每次 position 变化时平滑过渡
+  const animatedPnl = useAnimatedNumber(position?.pnl ?? 0)
+  const animatedPnlRate = useAnimatedNumber(position?.pnlRate ?? 0)
+  const animatedCurrentPrice = useAnimatedNumber(position?.currentPrice ?? 0)
+
   if (!position && !loading) {
     return (
       <View className="flex flex-col items-center justify-center h-full bg-slate-900">
@@ -163,10 +199,10 @@ export default function PositionPage() {
               <Text className="block text-xs text-slate-400">浮动盈亏</Text>
               <View className="flex flex-row items-baseline gap-2 mt-1">
                 <Text className={`block text-3xl font-bold tabular-nums ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {fmtMoney(position?.pnl ?? 0)}
+                  {fmtMoney(animatedPnl)}
                 </Text>
                 <Text className={`block text-base font-semibold tabular-nums ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {fmtPct(position?.pnlRate ?? 0)}
+                  {fmtPct(animatedPnlRate)}
                 </Text>
               </View>
             </View>
@@ -178,7 +214,7 @@ export default function PositionPage() {
                 <DollarSign size={14} color="#94a3b8" />
                 <View>
                   <Text className="block text-xs text-slate-400">当前价</Text>
-                  <Text className="block text-sm font-medium text-white tabular-nums mt-1">¥{position?.currentPrice?.toFixed(2) || '--'}</Text>
+                  <Text className="block text-sm font-medium text-white tabular-nums mt-1">{position ? `¥${animatedCurrentPrice.toFixed(2)}` : '--'}</Text>
                 </View>
               </View>
               <View className="flex flex-row items-center gap-2">
@@ -210,7 +246,15 @@ export default function PositionPage() {
         <Card className="bg-slate-800 border-slate-700 rounded-2xl mb-4">
           <CardContent className="p-4">
             <View className="flex flex-row items-center justify-between mb-3">
-              <Text className="block text-sm font-medium text-white">日K走势</Text>
+              <View className="flex flex-row items-center gap-2">
+                <Text className="block text-sm font-medium text-white">日K走势</Text>
+                <View
+                  className="p-1 rounded-md bg-slate-700"
+                  onClick={() => Taro.navigateTo({ url: '/pages/indicator-settings/index' })}
+                >
+                  <SettingsIcon size={12} color="#94a3b8" />
+                </View>
+              </View>
               <View className="flex flex-row gap-1">
                 {(['30', '60', '120'] as const).map((p) => (
                   <Badge
@@ -227,15 +271,16 @@ export default function PositionPage() {
             </View>
             {kline.length > 0 ? (
               <CandleChart
-                // @ts-expect-error 数据字段类型兼容
                 data={kline.map((k: any) => ({
-                  time: k.date?.slice(5) || k.day?.slice(5) || '',
+                  date: k.date || k.day || '',
                   open: parseFloat(k.open),
                   high: parseFloat(k.high),
                   low: parseFloat(k.low),
                   close: parseFloat(k.close),
                 }))}
                 costPrice={position?.avgCost}
+                currentPrice={position?.currentPrice}
+                indicators={klineIndicators}
                 height={220}
               />
             ) : (

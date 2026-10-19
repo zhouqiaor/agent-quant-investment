@@ -16,4 +16,7 @@ pnpm install
 echo "Building the Taro project..."
 pnpm build
 
+echo "Building the NestJS server (dist/main.js for FaaS entry)..."
+pnpm --dir server build
+
 echo "Build completed successfully! Assets are in /dist"

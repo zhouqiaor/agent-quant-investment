@@ -52,8 +52,9 @@ export default defineConfig<'vite'>(async (merge, _env) => {
       return [];
     }
     const miniCIConfig: Record<string, any> = {
-      version: pkg.version,
-      desc: pkg.description,
+      // CI 可通过环境变量注入版本号与描述（如 run_number），本地缺省取 package.json
+      version: process.env.TARO_UPLOAD_VERSION || pkg.version,
+      desc: process.env.TARO_UPLOAD_DESC || pkg.description,
     };
     if (hasWeappConfig) {
       miniCIConfig.weapp = {

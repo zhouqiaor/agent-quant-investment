@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch: # 支持手动触发（Actions 页面 Run workflow，可随时重新部署体验版）
 
 # 同一分支的并发运行只保留最新一次，节省额度
 concurrency:
@@ -204,7 +205,34 @@ jobs:
           TARO_APP_WEAPP_APPID: ${{ secrets.WEAPP_APPID }}
 
       # plugin-mini-ci 的独立 upload 命令：上传 dist/ 为体验版
+      # 版本号用 run_number 自增（1.0.N），描述带 commit SHA 便于在 mp 后台追溯
       - name: Upload to WeChat
+        id: upload
         run: pnpm upload:weapp
         env:
           TARO_APP_WEAPP_APPID: ${{ secrets.WEAPP_APPID }}
+          TARO_UPLOAD_VERSION: 1.0.${{ github.run_number }}
+          TARO_UPLOAD_DESC: "CI run #${{ github.run_number }} - ${{ github.sha }}"
+
+      # 体验版二维码（dist/upload.png）作为 CI 产物保存，可在 Actions 页面下载扫码
+      - name: Upload experience QR code
+        if: steps.upload.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: weapp-experience-qrcode
+          path: dist/upload.png
+          retention-days: 30
+          if-no-files-found: warn
+
+      # 汇总页展示版本信息与二维码获取方式
+      - name: Write job summary
+        if: steps.upload.outcome == 'success'
+        run: |
+          {
+            echo "## 微信小程序体验版发布成功"
+            echo ""
+            echo "- 版本号：\`1.0.${{ github.run_number }}\`"
+            echo "- 提交：\`${{ github.sha }}\`"
+            echo "- 体验版二维码：本页底部 Artifacts 下载 \`weapp-experience-qrcode\`，微信扫码即可体验"
+            echo "- 或在 [mp.weixin.qq.com](https://mp.weixin.qq.com) → 版本管理 → 开发版本 中查看"
+          } >> "$GITHUB_STEP_SUMMARY"

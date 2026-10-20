@@ -51,11 +51,13 @@ export class MarketPollingService implements OnModuleDestroy {
     }
     this.intervalMs = intervalMs;
     this.polling = true;
-    await this.tick();
     this.timer = setInterval(() => {
       void this.tick();
     }, intervalMs);
     this.logger.log(`行情轮询已启动，间隔 ${intervalMs}ms`);
+    // 首次拉取绝不阻塞启动流程：无外网环境下 DNS/连接可挂起 20s+，
+    // 若 await 会卡死 Nest onModuleInit 导致健康探测超时。tick() 内部自捕获错误，浮动调用安全。
+    void this.tick();
   }
 
   stop(): void {

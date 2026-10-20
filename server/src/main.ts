@@ -23,8 +23,27 @@ function parsePort(): number {
   return 3000;
 }
 
+const BOOT_T0 = Date.now();
+
+/** 启动里程碑埋点：下次部署日志可直接定位卡在哪个阶段 */
+function step(label: string): void {
+  console.log(`[boot +${Date.now() - BOOT_T0}ms] ${label}`);
+}
+
+// 兜底：任何未捕获异常都留下明确日志，绝不静默死亡
+process.on('uncaughtException', (err) => {
+  console.error(`[FATAL] uncaughtException: ${err?.stack || err}`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  // 记录但保持存活：服务健康检查优先于崩溃退出
+  console.error(`[ERROR] unhandledRejection: ${reason instanceof Error ? reason.stack : reason}`);
+});
+
 async function bootstrap() {
+  step(`bootstrap 开始 pid=${process.pid} node=${process.version} cwd=${process.cwd()} argv=${process.argv.slice(2).join(' ')}`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  step('NestFactory.create 完成（模块实例化 + 全部 onModuleInit 钩子）');
 
   // 平台健康检查兜底：GET / 与 GET /health 无论全局前缀/静态托管配置如何都返回 200
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -68,17 +87,22 @@ async function bootstrap() {
 
   // 2. 解析端口并绑定 0.0.0.0（FaaS 容器外部可访问）
   const port = parsePort();
+  step(`准备 listen 0.0.0.0:${port}`);
   try {
     await app.listen(port, '0.0.0.0');
-    console.log(`Server running on http://0.0.0.0:${port} (health: /health)`);
+    console.log(`[boot +${Date.now() - BOOT_T0}ms] Server running on http://0.0.0.0:${port} (health: /health)`);
   } catch (err) {
     const code = (err as { code?: string })?.code;
     if (code === 'EADDRINUSE') {
-      console.error(`端口 ${port} 被占用! 请释放端口后重试。`);
+      console.error(`[FATAL] 端口 ${port} 被占用(EADDRINUSE)! 请释放端口后重试。`);
       process.exit(1);
-    } else {
-      throw err;
     }
+    console.error(`[FATAL] listen 失败: ${(err as Error)?.stack || err}`);
+    process.exit(1);
   }
 }
-bootstrap();
+
+bootstrap().catch((err) => {
+  console.error(`[FATAL] bootstrap 异常(可能为模块初始化钩子抛错): ${(err as Error)?.stack || err}`);
+  process.exit(1);
+});

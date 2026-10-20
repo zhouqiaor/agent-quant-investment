@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
-import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
+import * as os from 'os';
+import { dirname, isAbsolute, join, resolve } from 'path';
 import Database = require('better-sqlite3');
 
 export interface CustomStrategyRecord {
@@ -115,6 +116,29 @@ export class PersistenceService implements OnModuleInit {
     this.dbPath = dbPath || process.env.SQLITE_PATH || 'data/quant.db';
   }
 
+  /**
+   * 纯 JS 可写性探测：绝不对不存在的可疑路径直接 mkdir（procfs/sysfs 上
+   * mkdirSync 可能挂起）。先回溯到最深已存在祖先目录，用写删探针文件验证；
+   * 全部通过后才 recursive 建目标目录。
+   */
+  private ensureWritableDir(dir: string): boolean {
+    // 虚拟文件系统直接排除
+    if (/^\/(proc|sys|dev)(\/|$)/.test(dir)) return false;
+    try {
+      let ancestor = dir;
+      while (ancestor !== '/' && !existsSync(ancestor)) {
+        ancestor = dirname(ancestor);
+      }
+      const probe = join(ancestor, `.write-probe-${Date.now()}`);
+      writeFileSync(probe, 'ok');
+      unlinkSync(probe);
+      if (ancestor !== dir) mkdirSync(dir, { recursive: true });
+      return existsSync(dir);
+    } catch {
+      return false;
+    }
+  }
+
   /** 测试基建：切换存储路径并重新初始化（关闭旧连接，建新库） */
   setDbPath(path: string): void {
     if (this.db) {
@@ -125,15 +149,63 @@ export class PersistenceService implements OnModuleInit {
     this.init();
   }
 
+  /**
+   * 候选路径策略（FaaS 加固）：
+   * 1. 显式注入/SQLITE_PATH（绝对路径优先）
+   * 2. cwd 相对路径（本地开发行为不变，解析为绝对路径）
+   * 3. /tmp 回退（veFaaS 等只读容器场景，仅 /tmp 可写）
+   * 任一路径 mkdir/建库失败自动降级到下一候选，最终失败才抛出。
+   */
   init() {
     if (this.db) return;
-    const dir = dirname(this.dbPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    this.db = new Database(this.dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.createTables();
-    this.migrate();
-    this.logger.log(`SQLite 持久化已初始化: ${this.dbPath}`);
+    const primary = isAbsolute(this.dbPath)
+      ? this.dbPath
+      : resolve(process.cwd(), this.dbPath);
+    const candidates = Array.from(
+      new Set(
+        [
+          primary,
+          join(os.tmpdir(), 'agent-quant', 'quant.db'),
+        ].filter(Boolean),
+      ),
+    );
+    let lastErr: unknown;
+    for (const candidate of candidates) {
+      const dir = dirname(candidate);
+      // 先用纯 JS 探测目录可写（避免在 /proc 等特殊路径上原生 sqlite 打开挂起）
+      if (!this.ensureWritableDir(dir)) {
+        lastErr = new Error(`目录不可写: ${dir}`);
+        this.logger.warn(
+          `SQLite 候选路径跳过（目录不可写）: ${dir}，尝试下一个候选路径`,
+        );
+        continue;
+      }
+      try {
+        this.db = new Database(candidate);
+        this.dbPath = candidate;
+        this.db.pragma('journal_mode = WAL');
+        this.createTables();
+        this.migrate();
+        this.logger.log(`SQLite 持久化已初始化: ${candidate}`);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (this.db) {
+          try {
+            this.db.close();
+          } catch {
+            /* 忽略关闭异常 */
+          }
+          this.db = null as unknown as Database.Database;
+        }
+        this.logger.warn(
+          `SQLite 初始化失败（${candidate}）: ${
+            err instanceof Error ? err.message : String(err)
+          }，尝试下一个候选路径`,
+        );
+      }
+    }
+    throw lastErr ?? new Error('SQLite 初始化失败：无可用数据目录');
   }
 
   /**

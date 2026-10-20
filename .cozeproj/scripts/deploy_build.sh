@@ -19,4 +19,7 @@ pnpm build
 echo "Building the NestJS server (dist/main.js for FaaS entry)..."
 pnpm --dir server build
 
-echo "Build completed successfully! Assets are in /dist"
+echo "Building the H5 web app (dist-web, hosted by Nest in production)..."
+pnpm build:web
+
+echo "Build completed successfully! server/dist/main.js + dist-web are ready."

@@ -12,12 +12,12 @@ function parsePort(): number {
   const portIndex = args.indexOf('-p');
   if (portIndex !== -1 && args[portIndex + 1]) {
     const port = parseInt(args[portIndex + 1], 10);
-    if (!isNaN(port) && port > 0 && port < 65536) {
+    if (!Number.isNaN(port) && port > 0 && port < 65536) {
       return port;
     }
   }
   const envPort = parseInt(process.env.PORT ?? '', 10);
-  if (!isNaN(envPort) && envPort > 0 && envPort < 65536) {
+  if (!Number.isNaN(envPort) && envPort > 0 && envPort < 65536) {
     return envPort;
   }
   return 3000;

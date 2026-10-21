@@ -93,30 +93,35 @@ export function applySchemeToRoot(scheme: ColorScheme): void {
     root.setAttribute('data-theme', scheme)
   }
 
-  try {
-    if (scheme === 'light') {
-      Taro.setNavigationBarColor({
-        frontColor: '#000000',
-        backgroundColor: '#f1f5f9',
-      })
-      Taro.setBackgroundColor({
-        backgroundColor: '#f1f5f9',
-        backgroundColorTop: '#f1f5f9',
-        backgroundColorBottom: '#f1f5f9',
-      })
-    } else {
-      Taro.setNavigationBarColor({
-        frontColor: '#ffffff',
-        backgroundColor: '#0f172a',
-      })
-      Taro.setBackgroundColor({
-        backgroundColor: '#0f172a',
-        backgroundColorTop: '#0f172a',
-        backgroundColorBottom: '#0f172a',
-      })
+  // 导航栏/窗口背景色 API 仅小程序支持；H5 端调用会返回被拒绝的 Promise
+  //（"暂时不支持 API"），同步 try/catch 无法捕获，会触发 unhandledrejection 报错浮层
+  const isMiniApp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP || Taro.getEnv() === Taro.ENV_TYPE.TT
+  if (isMiniApp) {
+    try {
+      if (scheme === 'light') {
+        Taro.setNavigationBarColor({
+          frontColor: '#000000',
+          backgroundColor: '#f1f5f9',
+        }).catch(() => {})
+        Taro.setBackgroundColor({
+          backgroundColor: '#f1f5f9',
+          backgroundColorTop: '#f1f5f9',
+          backgroundColorBottom: '#f1f5f9',
+        }).catch(() => {})
+      } else {
+        Taro.setNavigationBarColor({
+          frontColor: '#ffffff',
+          backgroundColor: '#0f172a',
+        }).catch(() => {})
+        Taro.setBackgroundColor({
+          backgroundColor: '#0f172a',
+          backgroundColorTop: '#0f172a',
+          backgroundColorBottom: '#0f172a',
+        }).catch(() => {})
+      }
+    } catch {
+      /* 部分机型 API 异常时静默 */
     }
-  } catch {
-    /* H5 等不支持的环境静默 */
   }
 }
 
